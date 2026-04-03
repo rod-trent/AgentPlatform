@@ -635,6 +635,26 @@ document.getElementById("btn-pick-script").addEventListener("click", pickScriptF
 document.getElementById("btn-add-agent").addEventListener("click", submitAddAgent);
 document.getElementById("btn-cancel-edit").addEventListener("click", resetForm);
 document.getElementById("btn-open-data-dir").addEventListener("click", () => window.agentAPI.openDataDir());
+
+document.getElementById("btn-export-agents").addEventListener("click", async () => {
+  const res = await window.agentAPI.exportAgents();
+  if (res.canceled) return;
+  if (!res.success) { toast(res.error || "Export failed.", "error"); return; }
+  toast(`Exported ${res.count} agent${res.count !== 1 ? "s" : ""} successfully.`, "success");
+});
+
+document.getElementById("btn-import-agents").addEventListener("click", async () => {
+  const res = await window.agentAPI.importAgents();
+  if (res.canceled) return;
+  if (!res.success) { toast(res.error || "Import failed.", "error"); return; }
+
+  agents = await window.agentAPI.listAgents();
+  renderAgentList();
+
+  let msg = `Imported ${res.imported} agent${res.imported !== 1 ? "s" : ""}.`;
+  if (res.skipped.length) msg += ` Skipped ${res.skipped.length} duplicate${res.skipped.length !== 1 ? "s" : ""} (${res.skipped.join(", ")}).`;
+  toast(msg, res.imported ? "success" : "info");
+});
 document.getElementById("f-provider").addEventListener("change", onProviderChange);
 document.getElementById("f-schedule-pick").addEventListener("change", onScheduleChange);
 document.getElementById("f-temp").addEventListener("input", () => {

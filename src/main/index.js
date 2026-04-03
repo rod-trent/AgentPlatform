@@ -458,6 +458,88 @@ function registerIpcHandlers() {
     return app.getVersion();
   });
 
+  // Export agents to a user-chosen JSON file
+  ipcMain.handle("agents:export", async (e) => {
+    if (!guard(e)) return { success: false, error: "Unauthorized" };
+
+    const agents = registry.loadRegistry();
+    if (!agents.length) return { success: false, error: "No agents to export." };
+
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      title: "Export Agents",
+      defaultPath: `ai-agents-${new Date().toISOString().slice(0, 10)}.json`,
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    });
+    if (canceled || !filePath) return { success: false, canceled: true };
+
+    // Strip volatile runtime state — export only the definition fields
+    const exportable = agents.map(({ id, name, description, type, enabled, schedule,
+      provider, model, temperature, systemPrompt, userPrompt,
+      command, scriptPath, args, timeoutMs, createdAt }) => ({
+      id, name, description, type, enabled, schedule,
+      provider, model, temperature, systemPrompt, userPrompt,
+      command, scriptPath, args, timeoutMs, createdAt,
+    }));
+
+    const payload = {
+      exportedBy:  "AI Agent Platform",
+      version:     app.getVersion(),
+      exportedAt:  new Date().toISOString(),
+      agents:      exportable,
+    };
+
+    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), "utf-8");
+    return { success: true, count: exportable.length, filePath };
+  });
+
+  // Import agents from a JSON file previously exported by this app
+  ipcMain.handle("agents:import", async (e) => {
+    if (!guard(e)) return { success: false, error: "Unauthorized" };
+
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+      title: "Import Agents",
+      filters: [{ name: "JSON", extensions: ["json"] }],
+      properties: ["openFile"],
+    });
+    if (canceled || !filePaths.length) return { success: false, canceled: true };
+
+    let parsed;
+    try {
+      parsed = JSON.parse(fs.readFileSync(filePaths[0], "utf-8"));
+    } catch {
+      return { success: false, error: "Could not read file. Make sure it is a valid JSON export." };
+    }
+
+    // Accept either the envelope format { agents: [...] } or a bare array
+    const incoming = Array.isArray(parsed) ? parsed : parsed?.agents;
+    if (!Array.isArray(incoming) || !incoming.length) {
+      return { success: false, error: "No agents found in the selected file." };
+    }
+
+    const existing = registry.loadRegistry();
+    const existingNames = new Set(existing.map(a => a.name.toLowerCase()));
+
+    let imported = 0;
+    const skipped = [];
+
+    for (const raw of incoming) {
+      if (!raw?.name?.trim()) { skipped.push("(unnamed)"); continue; }
+      if (existingNames.has(raw.name.trim().toLowerCase())) {
+        skipped.push(raw.name.trim()); continue;
+      }
+      registry.createAgent(raw);
+      existingNames.add(raw.name.trim().toLowerCase());
+      imported++;
+    }
+
+    if (workerActive) worker.rebuildSchedule();
+    const updated = registry.loadRegistry();
+    mainWindow?.webContents.send("agents:updated", updated);
+    mainWindow?.webContents.send("worker:status", { running: workerActive, scheduledCount: worker.scheduledCount() });
+
+    return { success: true, imported, skipped };
+  });
+
   // Shell
   ipcMain.handle("shell:openDataDir", (e) => {
     if (!guard(e)) return;

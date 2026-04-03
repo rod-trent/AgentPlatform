@@ -29,7 +29,11 @@ contextBridge.exposeInMainWorld("agentAPI", {
   getWorkerStatus: ()        => ipcRenderer.invoke("worker:status"),
 
   // ── App info ──────────────────────────────────────────────────────────────
-  getVersion: () => ipcRenderer.invoke("app:getVersion"),
+  getVersion:   () => ipcRenderer.invoke("app:getVersion"),
+
+  // ── Import / Export ───────────────────────────────────────────────────────
+  exportAgents: () => ipcRenderer.invoke("agents:export"),
+  importAgents: () => ipcRenderer.invoke("agents:import"),
 
   // ── Shell ─────────────────────────────────────────────────────────────────
   openDataDir:  ()           => ipcRenderer.invoke("shell:openDataDir"),
