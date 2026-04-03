@@ -247,6 +247,15 @@ function createWindow() {
 function createTray() {
   tray = new Tray(createTrayIcon());
 
+  const showAbout = () => dialog.showMessageBox(mainWindow, {
+    type:    "info",
+    icon:    getAppIcon(64),
+    title:   "About AI Agent Platform",
+    message: "AI Agent Platform",
+    detail:  `Version ${app.getVersion()}\n\nMulti-provider AI automation for Windows.\n\nCopyright © 2025 Rod Trent`,
+    buttons: ["OK"],
+  });
+
   const buildMenu = () => Menu.buildFromTemplate([
     {
       label: "Open AI Agent Platform",
@@ -257,6 +266,8 @@ function createTray() {
       label: workerActive ? "Stop Scheduler" : "Start Scheduler",
       click: () => workerActive ? _stopWorker() : _startWorker(),
     },
+    { type: "separator" },
+    { label: "About", click: showAbout },
     { type: "separator" },
     {
       label: "Quit",
@@ -441,6 +452,12 @@ function registerIpcHandlers() {
     return { running: workerActive, scheduledCount: worker.scheduledCount() };
   });
 
+  // App info
+  ipcMain.handle("app:getVersion", (e) => {
+    if (!guard(e)) return "";
+    return app.getVersion();
+  });
+
   // Shell
   ipcMain.handle("shell:openDataDir", (e) => {
     if (!guard(e)) return;
@@ -460,11 +477,34 @@ function registerIpcHandlers() {
   });
 }
 
+// ── Native application menu ───────────────────────────────────────────────────
+function createAppMenu() {
+  const showAboutMenu = () => dialog.showMessageBox({
+    type:    "info",
+    icon:    getAppIcon(64),
+    title:   "About AI Agent Platform",
+    message: "AI Agent Platform",
+    detail:  `Version ${app.getVersion()}\n\nMulti-provider AI automation for Windows.\n\nCopyright © 2025 Rod Trent`,
+    buttons: ["OK"],
+  });
+
+  const template = [
+    {
+      label: "Help",
+      submenu: [
+        { label: `About AI Agent Platform v${app.getVersion()}`, click: showAboutMenu },
+      ],
+    },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 app.whenReady().then(() => {
   // Seed provider settings into worker/client at startup
   worker.setSettings(buildEffectiveSettings());
 
+  createAppMenu();
   registerIpcHandlers();
   createWindow();
   createTray();

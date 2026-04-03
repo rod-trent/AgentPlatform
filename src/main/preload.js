@@ -28,6 +28,9 @@ contextBridge.exposeInMainWorld("agentAPI", {
   stopWorker:      ()        => ipcRenderer.invoke("worker:stop"),
   getWorkerStatus: ()        => ipcRenderer.invoke("worker:status"),
 
+  // ── App info ──────────────────────────────────────────────────────────────
+  getVersion: () => ipcRenderer.invoke("app:getVersion"),
+
   // ── Shell ─────────────────────────────────────────────────────────────────
   openDataDir:  ()           => ipcRenderer.invoke("shell:openDataDir"),
   openFilePicker: ()         => ipcRenderer.invoke("shell:openFilePicker"),

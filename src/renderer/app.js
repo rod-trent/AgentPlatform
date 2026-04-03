@@ -460,7 +460,13 @@ document.getElementById("modal-overlay").addEventListener("click", closeSettings
 document.getElementById("settings-dialog").addEventListener("click", e => e.stopPropagation());
 
 async function openSettings() {
-  const [settings] = await Promise.all([window.agentAPI.getSettings()]);
+  const [settings, version] = await Promise.all([
+    window.agentAPI.getSettings(),
+    window.agentAPI.getVersion(),
+  ]);
+
+  const verEl = document.getElementById("settings-version");
+  if (verEl) verEl.textContent = version ? `v${version}` : "";
 
   // Default provider dropdown
   const defSel = document.getElementById("s-default-provider");
