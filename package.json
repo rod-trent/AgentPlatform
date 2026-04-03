@@ -10,8 +10,11 @@
   },
   "main": "src/main/index.js",
   "scripts": {
+    "generate-icon": "node scripts/generate-icon.js",
     "start": "electron .",
+    "prebuild": "node scripts/generate-icon.js",
     "build": "electron-builder --win --x64",
+    "prebuild:dir": "node scripts/generate-icon.js",
     "build:dir": "electron-builder --win --x64 --dir"
   },
   "dependencies": {

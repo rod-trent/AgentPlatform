@@ -18,8 +18,7 @@ win:
     - target: nsis
       arch:
         - x64
-  # Uncomment and point to a real .ico once you have one:
-  # icon: assets/icon.ico
+  icon: assets/icon.ico
 
 nsis:
   oneClick: false
