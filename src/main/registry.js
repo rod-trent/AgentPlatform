@@ -104,7 +104,7 @@ function recordRun(id, status, result) {
   updateAgent(id, {
     lastRun:    new Date().toISOString(),
     lastStatus: status,
-    lastResult: result ? String(result).slice(0, 1000) : null,
+    lastResult: result ? String(result).slice(0, 50_000) : null,
   });
 }
 
