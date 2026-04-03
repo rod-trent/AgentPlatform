@@ -469,6 +469,7 @@ async function openSettings() {
     .join("");
   defSel.value = settings.defaultProvider || Object.keys(PROVIDERS)[0] || "xai";
   document.getElementById("s-minimize-to-tray").checked = settings.minimizeToTray !== false;
+  document.getElementById("s-run-at-startup").checked   = !!settings.runAtStartup;
 
   // Stash settings so selectSettingsProvider can read them when chips are clicked
   document.getElementById("settings-dialog").dataset.settings = JSON.stringify(settings);
@@ -547,6 +548,7 @@ function toggleKeyVis() {
 async function saveSettings() {
   const defaultProvider  = document.getElementById("s-default-provider").value;
   const minimizeToTray   = document.getElementById("s-minimize-to-tray").checked;
+  const runAtStartup     = document.getElementById("s-run-at-startup").checked;
 
   // Collect current provider edits
   const apiKey = document.getElementById("s-api-key").value.trim();
@@ -559,7 +561,7 @@ async function saveSettings() {
     if (baseUrl) providers[activeSettingsProvider].baseUrl = baseUrl;
   }
 
-  const res = await window.agentAPI.saveSettings({ defaultProvider, minimizeToTray, providers });
+  const res = await window.agentAPI.saveSettings({ defaultProvider, minimizeToTray, runAtStartup, providers });
   if (res.success) {
     closeSettings();
     toast("Settings saved!", "success");

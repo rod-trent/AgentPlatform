@@ -383,7 +383,9 @@ function registerIpcHandlers() {
         apiKeyHint:   key.length > 12 ? key.slice(0, 8) + "…" + key.slice(-4) : (key ? "••••••••" : ""),
       };
     }
-    return { defaultProvider: s.defaultProvider, minimizeToTray: s.minimizeToTray, providers: maskedProviders };
+    // Read run-at-startup state directly from Windows (source of truth)
+    const runAtStartup = app.getLoginItemSettings().openAtLogin;
+    return { defaultProvider: s.defaultProvider, minimizeToTray: s.minimizeToTray, runAtStartup, providers: maskedProviders };
   });
 
   ipcMain.handle("settings:set", (e, data) => {
@@ -396,6 +398,10 @@ function registerIpcHandlers() {
     }
     if (data.defaultProvider) current.defaultProvider = data.defaultProvider;
     if (typeof data.minimizeToTray === "boolean") current.minimizeToTray = data.minimizeToTray;
+    if (typeof data.runAtStartup === "boolean") {
+      // Apply immediately to the Windows Run registry key
+      app.setLoginItemSettings({ openAtLogin: data.runAtStartup });
+    }
     if (data.providers) {
       current.providers = current.providers || {};
       for (const [id, cfg] of Object.entries(data.providers)) {

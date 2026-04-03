@@ -27,6 +27,7 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: "AI Agent Platform"
+  include: assets/installer.nsh
   # Never delete Documents/AIAgentPlatform on uninstall — it holds user data
   deleteAppDataOnUninstall: false
 
