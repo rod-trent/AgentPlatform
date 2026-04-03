@@ -15,15 +15,16 @@ let selectedIds     = new Set(); // agent ids checked for export
   // Load providers first — everything else depends on them
   PROVIDERS = await window.agentAPI.getProviders();
 
-  const [agentList, status] = await Promise.all([
+  const [agentList, status, settings] = await Promise.all([
     window.agentAPI.listAgents(),
     window.agentAPI.getWorkerStatus(),
+    window.agentAPI.getSettings(),
   ]);
 
   agents       = agentList;
   workerActive = status.running;
 
-  populateFormProviders();
+  populateFormProviders(settings.defaultProvider);
   updateWorkerPill(status.running, status.scheduledCount);
   renderAgentList();
 
@@ -48,13 +49,15 @@ let selectedIds     = new Set(); // agent ids checked for export
 // ── Provider helpers ──────────────────────────────────────────────────────────
 
 /** Populate the provider dropdown and model list in the Add-Agent form. */
-function populateFormProviders() {
+function populateFormProviders(defaultProvider) {
   const sel = document.getElementById("f-provider");
   if (!sel) return;
   sel.innerHTML = Object.entries(PROVIDERS)
     .map(([id, p]) => `<option value="${id}">${p.name}</option>`)
     .join("");
-  // Set default to first provider
+  if (defaultProvider && sel.querySelector(`option[value="${defaultProvider}"]`)) {
+    sel.value = defaultProvider;
+  }
   if (sel.options.length) onProviderChange();
 }
 
@@ -578,6 +581,7 @@ async function saveSettings() {
   const res = await window.agentAPI.saveSettings({ defaultProvider, minimizeToTray, runAtStartup, providers });
   if (res.success) {
     closeSettings();
+    populateFormProviders(defaultProvider);
     toast("Settings saved!", "success");
   } else {
     toast("Failed to save settings.", "error");

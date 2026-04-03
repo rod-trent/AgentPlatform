@@ -15,7 +15,7 @@ const PROVIDERS = {
     name:        "xAI (Grok)",
     baseUrl:     "https://api.x.ai/v1",
     requiresKey: true,
-    models:      ["grok-beta", "grok-3", "grok-3-fast", "grok-3-mini"],
+    models:      ["grok-3", "grok-3-fast", "grok-3-mini"],
   },
   openai: {
     name:        "OpenAI",
