@@ -19,6 +19,7 @@ Built with [Electron](https://electronjs.org) and styled to the Windows 11 Fluen
 - **System tray** — optionally minimize to the system tray and keep agents running in the background
 - **Windows 11 Fluent UI** — Mica material, Acrylic blur, Fluent motion, Segoe UI Variable
 - **No cloud dependency** — all data stays on your machine in `Documents\AIAgentPlatform\`
+- **OneDrive sync** — because data lives in `Documents\`, any cloud sync tool (OneDrive, Dropbox, etc.) automatically roams your agents, settings, and provider keys across every machine you install the app on
 
 ---
 
@@ -126,6 +127,8 @@ Documents\AIAgentPlatform\
 ├── agent_registry.json   ← agent definitions and run history
 └── settings.json         ← provider config and preferences
 ```
+
+Because this folder sits inside `Documents\`, it is automatically picked up by **OneDrive** (and any other folder-sync tool you use). Install the app on a second machine, and your agents, settings, and provider keys are already there — no export, no copy, no extra configuration required.
 
 ---
 

@@ -102,6 +102,8 @@ Documents\AIAgentPlatform\
 └── settings.json         ← provider config and app preferences
 ```
 
+There's a side effect of that location worth calling out: because the data folder sits inside `Documents\`, it is automatically synced by **OneDrive** — and any other folder-sync service you use. Install AI Agent Platform on a second machine, sign in to the same OneDrive account, and your agents, settings, and provider keys are already there before you open the app for the first time. No export, no copy, no reconfiguration. It's not a designed cloud feature — it's just a consequence of putting user data where user data belongs.
+
 ---
 ## Share Your Agents
 
