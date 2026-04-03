@@ -50,11 +50,13 @@ The UI is built on the Windows 11 **Fluent Design System** — Mica background m
 The sidebar handles everything about creating or editing an agent. The **Prompt** tab exposes the full LLM configuration — system prompt, user prompt, provider, model, temperature, and schedule:
 
 ![Creating a prompt agent](Images/CreateAgent.png)
+
 *Configuring a prompt-based agent with provider and model selection.*
 
 The **Script** tab is for existing automation. Point it at any script, set a command interpreter and a timeout, pick a schedule:
 
 ![Creating a script agent](Images/AddAgent.png)
+
 *Configuring a script-based agent — Python, PowerShell, Node.js, or any executable.*
 
 ---
@@ -64,6 +66,7 @@ The **Script** tab is for existing automation. Point it at any script, set a com
 The Settings dialog handles provider configuration, system tray behavior, and Windows startup — all in one place:
 
 ![Settings dialog](Images/Settings.png)
+
 *Per-provider API key management, system tray and startup toggles, and app version — all in one dialog.*
 
 A few things worth noting about how credentials are handled:
