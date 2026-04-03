@@ -1,4 +1,4 @@
-# Introducing AI Agent Platform: Schedule Any AI Agent on Windows — No Python Required
+# Introducing AI Agent Platform: Schedule Any AI Agent on Windows
 
 *By Rod Trent | April 3, 2026*
 
