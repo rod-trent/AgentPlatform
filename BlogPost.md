@@ -103,35 +103,11 @@ Documents\AIAgentPlatform\
 ```
 
 ---
-
-## Get It
-
-The project is open source under the MIT license.
-
-**GitHub:** [https://github.com/rod-trent/AgentPlatform](https://github.com/rod-trent/AgentPlatform)
-
-To run from source:
-
-```bat
-git clone https://github.com/rod-trent/AgentPlatform.git
-cd AgentPlatform
-npm install
-npm start
-```
-
-To build the installer:
-
-```bat
-npm run build
-```
-
-The installer lands in `dist\AI Agent Platform Setup 1.0.0.exe`.
-
----
-
 ## Share Your Agents
 
 One of the most requested things in any automation tool is the ability to share your work. AI Agent Platform makes that simple: every agent you create can be exported to a plain JSON file and imported by anyone else running the app.
+
+![AI Agent Platform — export an Agent](Images/Export.png)
 
 Hit **⬇ Export** in the Active Agents header and a native Save dialog appears, defaulting the filename to something like `ai-agents-2026-04-03.json`. The file contains everything needed to recreate your agents — names, prompts, providers, models, schedules — with runtime state and API keys intentionally excluded. What gets exported is the definition, not the secrets.
 
@@ -159,6 +135,29 @@ The format is a readable JSON envelope so it can be stored in a GitHub repo, sha
   ]
 }
 ```
+
+## Get It
+
+The project is open source under the MIT license.
+
+**GitHub:** [https://github.com/rod-trent/AgentPlatform](https://github.com/rod-trent/AgentPlatform)
+
+To run from source:
+
+```bat
+git clone https://github.com/rod-trent/AgentPlatform.git
+cd AgentPlatform
+npm install
+npm start
+```
+
+To build the installer:
+
+```bat
+npm run build
+```
+
+The installer lands in `dist\AI Agent Platform Setup 1.0.0.exe`.
 
 ---
 
