@@ -1,0 +1,38 @@
+appId: com.rodtrent.agentplatform
+productName: AI Agent Platform
+copyright: "Copyright 2025 Rod Trent"
+
+# Pack src/ into the ASAR
+files:
+  - src/**/*
+
+# Assets live OUTSIDE the ASAR so they can be reached via process.resourcesPath
+extraResources:
+  - from: assets/
+    to: assets/
+    filter:
+      - "**/*"
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  # Uncomment and point to a real .ico once you have one:
+  # icon: assets/icon.ico
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  allowElevation: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: "AI Agent Platform"
+  # Never delete Documents/AIAgentPlatform on uninstall — it holds user data
+  deleteAppDataOnUninstall: false
+
+directories:
+  buildResources: assets
+  output: dist
+
+extends: null

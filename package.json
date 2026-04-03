@@ -1,0 +1,26 @@
+{
+  "name": "ai-agent-platform",
+  "version": "1.0.0",
+  "description": "Multi-provider AI agent automation platform — schedule prompt and script agents against any LLM.",
+  "author": "Rod Trent",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rod-trent/AgentPlatform.git"
+  },
+  "main": "src/main/index.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win --x64",
+    "build:dir": "electron-builder --win --x64 --dir"
+  },
+  "dependencies": {
+    "node-cron": "^3.0.3",
+    "openai": "^4.77.0",
+    "uuid": "^11.0.3"
+  },
+  "devDependencies": {
+    "electron": "^41.1.1",
+    "electron-builder": "^26.8.1"
+  }
+}

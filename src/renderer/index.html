@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Agent Platform</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<!-- ── Title bar (draggable) ─────────────────────────────────────────────── -->
+<div id="titlebar">
+  <div class="titlebar-icon"></div>
+  <span class="titlebar-title">AI Agent Platform</span>
+</div>
+
+<!-- ── Command bar ───────────────────────────────────────────────────────── -->
+<header id="header">
+  <div class="app-brand">
+    <div class="brand-icon">🤖</div>
+    <div class="brand-text">
+      <div class="brand-name">AI Agent Platform</div>
+      <div class="brand-sub">Multi-provider AI automation</div>
+    </div>
+  </div>
+
+  <div id="worker-pill">
+    <div class="status-ring"></div>
+    <span id="worker-label">Scheduler Stopped</span>
+  </div>
+
+  <button id="btn-toggle-worker" class="fluent-btn" title="Start / Stop Scheduler">
+    <span id="worker-btn-icon">▶</span>
+    <span id="worker-btn-label">Start</span>
+  </button>
+
+  <button id="btn-settings" class="fluent-btn icon-only" title="Settings" aria-label="Settings">⚙</button>
+</header>
+
+<!-- ── Main layout ───────────────────────────────────────────────────────── -->
+<div id="layout">
+
+  <!-- ── Sidebar: Add Agent ── -->
+  <aside id="sidebar">
+    <div class="pane-header">
+      <div class="pane-title" id="pane-title">Add Agent</div>
+      <div class="pane-sub"   id="pane-sub">Prompt or script-based</div>
+    </div>
+
+    <div id="sidebar-body">
+      <!-- Pivot tabs -->
+      <div class="pivot">
+        <button class="pivot-item active" id="tab-prompt">Prompt</button>
+        <button class="pivot-item"        id="tab-script">Script</button>
+      </div>
+
+      <!-- Error callout (shown near top so it's visible without scrolling) -->
+      <div id="form-error" class="callout-error"></div>
+
+      <!-- Name -->
+      <div class="fluent-input-wrap">
+        <label class="fluent-label" for="f-name">Name</label>
+        <input class="fluent-input" id="f-name" type="text"
+               placeholder="WeatherBot" autocomplete="off" />
+      </div>
+
+      <!-- Description -->
+      <div class="fluent-input-wrap">
+        <label class="fluent-label" for="f-desc">Description <span style="opacity:.5">(optional)</span></label>
+        <input class="fluent-input" id="f-desc" type="text"
+               placeholder="What does this agent do?" autocomplete="off" />
+      </div>
+
+      <!-- ── Prompt fields ── -->
+      <div id="prompt-fields">
+        <div class="fluent-input-wrap">
+          <label class="fluent-label" for="f-system">System Prompt</label>
+          <textarea class="fluent-textarea" id="f-system" rows="3"
+                    placeholder="You are a helpful assistant that…"></textarea>
+        </div>
+        <div class="fluent-input-wrap">
+          <label class="fluent-label" for="f-user">User Prompt</label>
+          <textarea class="fluent-textarea" id="f-user" rows="3"
+                    placeholder="What should the agent ask?"></textarea>
+        </div>
+        <div class="fluent-input-wrap">
+          <label class="fluent-label" for="f-provider">Provider</label>
+          <select class="fluent-select" id="f-provider">
+            <!-- Populated by app.js -->
+          </select>
+        </div>
+        <div class="fluent-input-wrap">
+          <label class="fluent-label" for="f-model">Model</label>
+          <select class="fluent-select" id="f-model">
+            <!-- Populated by app.js based on provider -->
+          </select>
+        </div>
+        <div class="fluent-input-wrap" id="f-model-custom-wrap" style="display:none">
+          <label class="fluent-label" for="f-model-custom">Model name</label>
+          <input class="fluent-input" id="f-model-custom" type="text"
+                 placeholder="e.g. llama3.2 or your model name" autocomplete="off" />
+        </div>
+        <div class="fluent-input-wrap">
+          <label class="fluent-label">Temperature — <span id="temp-val">0.7</span></label>
+          <div class="slider-row">
+            <input class="fluent-slider" id="f-temp" type="range"
+                   min="0" max="2" step="0.1" value="0.7"
+                   />
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Script fields ── -->
+      <div id="script-fields" style="display:none">
+        <div class="fluent-input-wrap">
+          <label class="fluent-label" for="f-command">Command</label>
+          <input class="fluent-input" id="f-command" type="text"
+                 placeholder="python  /  node  /  powershell" autocomplete="off" />
+        </div>
+        <div class="fluent-input-wrap">
+          <label class="fluent-label" for="f-script-path">Script Path</label>
+          <div class="path-row">
+            <input class="fluent-input" id="f-script-path" type="text"
+                   placeholder="C:\scripts\myAgent.py" autocomplete="off" />
+            <button class="fluent-btn icon-only" id="btn-pick-script" title="Browse…">📂</button>
+          </div>
+        </div>
+        <div class="fluent-input-wrap">
+          <label class="fluent-label" for="f-timeout">Timeout (seconds)</label>
+          <input class="fluent-input" id="f-timeout" type="number" value="30" min="1" max="3600" />
+        </div>
+      </div>
+
+      <div class="separator"></div>
+
+      <!-- Schedule -->
+      <div class="fluent-input-wrap">
+        <label class="fluent-label" for="f-schedule-pick">Schedule</label>
+        <select class="fluent-select" id="f-schedule-pick">
+          <option value="*/5 * * * *">Every 5 minutes</option>
+          <option value="*/10 * * * *" selected>Every 10 minutes</option>
+          <option value="*/15 * * * *">Every 15 minutes</option>
+          <option value="0,30 * * * *">Every 30 minutes</option>
+          <option value="0 * * * *">Every hour</option>
+          <option value="0 */2 * * *">Every 2 hours</option>
+          <option value="0 */6 * * *">Every 6 hours</option>
+          <option value="0 */12 * * *">Every 12 hours</option>
+          <option value="0 0 * * *">Daily at midnight</option>
+          <option value="0 8 * * *">Daily at 8 AM</option>
+          <option value="0 18 * * *">Daily at 6 PM</option>
+          <option value="0 9 * * 1-5">Weekdays at 9 AM</option>
+          <option value="0 9 * * 1">Mondays at 9 AM</option>
+          <option value="custom">Custom cron…</option>
+        </select>
+      </div>
+      <div id="custom-cron-row" class="fluent-input-wrap" style="display:none">
+        <label class="fluent-label" for="f-cron">Cron Expression</label>
+        <input class="fluent-input" id="f-cron" type="text"
+               placeholder="*/10 * * * *" spellcheck="false" autocomplete="off" />
+      </div>
+
+      <!-- Submit / Cancel edit -->
+      <button class="fluent-btn accent" id="btn-add-agent" style="width:100%;height:36px;font-size:13px">
+        + &nbsp;Add Agent
+      </button>
+      <button class="fluent-btn" id="btn-cancel-edit" style="width:100%;height:32px;font-size:12px;display:none">
+        Cancel Edit
+      </button>
+    </div>
+  </aside>
+
+  <!-- ── Main: Agent list ── -->
+  <main id="content">
+    <div class="content-card">
+      <div class="list-header">
+        <span class="list-title">Active Agents</span>
+        <span id="agent-count">0 agents</span>
+      </div>
+
+      <div id="agent-list"></div>
+
+      <div id="empty-state">
+        <div class="empty-icon">🤖</div>
+        <h3>No agents yet</h3>
+        <p>Create your first agent using the panel on the left. Use the <strong>Prompt</strong> tab to call any AI provider, or the <strong>Script</strong> tab to run — or import — any existing script or executable.</p>
+      </div>
+    </div>
+  </main>
+
+</div><!-- /layout -->
+
+<!-- ── Settings dialog (Fluent ContentDialog) ─────────────────────────────── -->
+<div id="modal-overlay">
+  <div id="settings-dialog">
+    <div class="dialog-title-bar">
+      <div class="dialog-icon">⚙</div>
+      <div class="dialog-title">Settings</div>
+    </div>
+    <div class="dialog-body">
+
+      <!-- Default provider -->
+      <div class="fluent-input-wrap">
+        <label class="fluent-label" for="s-default-provider">Default Provider</label>
+        <select class="fluent-select" id="s-default-provider">
+          <!-- Populated by app.js -->
+        </select>
+      </div>
+
+      <!-- System tray toggle -->
+      <div class="setting-row">
+        <div class="setting-row-text">
+          <div class="setting-row-label">Minimize to System Tray</div>
+          <div class="setting-row-sub">Closing the window keeps the app running in the tray</div>
+        </div>
+        <label class="f-toggle">
+          <input type="checkbox" id="s-minimize-to-tray" checked />
+          <div class="f-track"></div>
+          <div class="f-thumb"></div>
+        </label>
+      </div>
+
+      <div class="separator"></div>
+
+      <!-- Per-provider config -->
+      <div class="fluent-label" style="margin-bottom:6px">Configure Providers</div>
+      <div class="provider-chips" id="provider-chips">
+        <!-- Chip buttons populated by app.js -->
+      </div>
+
+      <div id="provider-config-panel">
+        <div class="fluent-input-wrap">
+          <label class="fluent-label">API Key</label>
+          <div class="key-row">
+            <input class="fluent-input" id="s-api-key" type="password"
+                   placeholder="Paste your key here…"
+                   autocomplete="new-password" spellcheck="false" />
+            <button class="fluent-btn icon-only" id="btn-toggle-key-vis" title="Show / hide">👁</button>
+          </div>
+          <span id="s-key-hint" style="font-size:11px;color:var(--text-tertiary);margin-top:3px;display:block"></span>
+        </div>
+        <div class="fluent-input-wrap" id="s-baseurl-wrap">
+          <label class="fluent-label" for="s-base-url">Base URL</label>
+          <input class="fluent-input" id="s-base-url" type="text"
+                 placeholder="https://…" autocomplete="off" spellcheck="false" />
+        </div>
+        <div class="dialog-info" id="s-provider-note"></div>
+      </div>
+
+      <!-- Info -->
+      <div class="dialog-info">
+        Keys are stored in <strong>Documents\AIAgentPlatform\settings.json</strong> — never uploaded anywhere except the provider's API.
+        <br/>
+        <button class="open-dir-btn" id="btn-open-data-dir">
+          📂 &nbsp;Open data folder
+        </button>
+      </div>
+
+    </div>
+
+    <div class="dialog-footer">
+      <button class="fluent-btn" id="btn-cancel-settings">Cancel</button>
+      <button class="fluent-btn accent" id="btn-save-settings">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Confirm dialog ─────────────────────────────────────────────────────── -->
+<div id="confirm-overlay">
+  <div id="confirm-dialog">
+    <div class="dialog-title-bar">
+      <div class="dialog-icon" id="confirm-icon">⚠</div>
+      <div class="dialog-title" id="confirm-title">Confirm</div>
+    </div>
+    <div class="dialog-body">
+      <p id="confirm-msg" style="font-size:13px;color:var(--text-secondary);line-height:1.5"></p>
+    </div>
+    <div class="dialog-footer">
+      <button class="fluent-btn" id="btn-confirm-cancel">Cancel</button>
+      <button class="fluent-btn" id="btn-confirm-ok" style="background:rgba(252,61,57,0.15);border-color:rgba(252,61,57,0.4);color:#fc7572">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toast ──────────────────────────────────────────────────────────────── -->
+<div id="toast">
+  <span class="toast-icon" id="toast-icon"></span>
+  <span id="toast-msg"></span>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
