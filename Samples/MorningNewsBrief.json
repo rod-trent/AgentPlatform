@@ -1,0 +1,25 @@
+{
+  "exportedBy": "AI Agent Platform",
+  "version": "1.0.0",
+  "exportedAt": "2026-04-03T20:56:00.441Z",
+  "agents": [
+    {
+      "id": "857c01b8-d676-447a-88a4-e378a403d24c",
+      "name": "Morning News Brief",
+      "description": "New brief",
+      "type": "prompt",
+      "enabled": true,
+      "schedule": "0 8 * * *",
+      "provider": "xai",
+      "model": "grok-3",
+      "temperature": 0.7,
+      "systemPrompt": "You are a concise news curator for someone in Middletown, Ohio. Summarize the top stories in tech, weather, US politics, and local news. Keep it under 300 words and end with one fun fact.",
+      "userPrompt": "Fetch or current headlines. Output a concise 5-bullet personalized briefing (tech, local Ohio news, world, etc.).",
+      "command": "",
+      "scriptPath": "",
+      "args": [],
+      "timeoutMs": 30000,
+      "createdAt": "2026-04-03T20:40:04.079Z"
+    }
+  ]
+}

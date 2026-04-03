@@ -1,0 +1,25 @@
+{
+  "exportedBy": "AI Agent Platform",
+  "version": "1.0.0",
+  "exportedAt": "2026-04-03T20:55:48.971Z",
+  "agents": [
+    {
+      "id": "baae86e9-d7be-4765-8241-e5a1d4191cb5",
+      "name": "Weather TV Reporter",
+      "description": "Reports on Weather",
+      "type": "prompt",
+      "enabled": true,
+      "schedule": "0 8 * * *",
+      "provider": "ollama",
+      "model": "llama3.2",
+      "temperature": 0.7,
+      "systemPrompt": "You are a TV weather forecaster and reporter.",
+      "userPrompt": "What is the weather for the SW Ohio area and what should I wear and how to prepare.",
+      "command": "",
+      "scriptPath": "",
+      "args": [],
+      "timeoutMs": 30000,
+      "createdAt": "2026-04-03T17:06:03.198Z"
+    }
+  ]
+}
