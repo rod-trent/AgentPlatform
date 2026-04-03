@@ -459,10 +459,11 @@ function registerIpcHandlers() {
   });
 
   // Export agents to a user-chosen JSON file
-  ipcMain.handle("agents:export", async (e) => {
+  ipcMain.handle("agents:export", async (e, { ids } = {}) => {
     if (!guard(e)) return { success: false, error: "Unauthorized" };
 
-    const agents = registry.loadRegistry();
+    const all = registry.loadRegistry();
+    const agents = ids?.length ? all.filter(a => ids.includes(a.id)) : all;
     if (!agents.length) return { success: false, error: "No agents to export." };
 
     const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {

@@ -893,3 +893,23 @@ body {
 #toast.success { border-left: 3px solid var(--status-success); }
 #toast.error   { border-left: 3px solid var(--status-error); }
 #toast.info    { border-left: 3px solid var(--status-info); }
+
+/* ── Export selection mode ───────────────────────────────────────────────── */
+.agent-select-cb {
+  display: none;
+  width: 16px; height: 16px;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+#agent-list.selection-mode .agent-select-cb {
+  display: block;
+}
+.agent-card.selectable {
+  cursor: pointer;
+  border-color: var(--stroke-strong);
+}
+.agent-card.selectable:has(.agent-select-cb:checked) {
+  background: color-mix(in srgb, var(--accent) 12%, var(--fill-subtle));
+  border-color: var(--accent);
+}

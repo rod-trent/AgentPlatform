@@ -7,6 +7,8 @@ let formType        = "prompt";
 let editingAgentId  = null;   // non-null when the sidebar is in edit mode
 let PROVIDERS     = {};          // keyed by providerId, populated on init
 let activeSettingsProvider = ""; // which chip is selected in the settings dialog
+let selectionMode   = false;     // true when user is picking agents to export
+let selectedIds     = new Set(); // agent ids checked for export
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 (async function init() {
@@ -163,9 +165,15 @@ function cardHTML(a) {
   const hasOutput = !!(a.lastResult);
   const outputId  = `out-${a.id}`;
 
+  const selectCb = selectionMode
+    ? `<input type="checkbox" class="agent-select-cb" data-action="select" data-id="${a.id}"
+              ${selectedIds.has(a.id) ? "checked" : ""} />`
+    : "";
+
   return `
-<div class="agent-card" id="card-${a.id}">
+<div class="agent-card${selectionMode ? " selectable" : ""}" id="card-${a.id}">
   <div class="card-row-top">
+    ${selectCb}
     <div class="status-indicator ${dotClass}"></div>
     <div class="card-info">
       <div class="card-name">${esc(a.name)}</div>
@@ -624,8 +632,15 @@ document.getElementById("agent-list").addEventListener("click", e => {
 });
 
 document.getElementById("agent-list").addEventListener("change", e => {
-  const el = e.target.closest("[data-action='toggle']");
-  if (el) toggleAgent(el.dataset.id, el.checked);
+  const toggle = e.target.closest("[data-action='toggle']");
+  if (toggle) toggleAgent(toggle.dataset.id, toggle.checked);
+
+  const selectCb = e.target.closest("[data-action='select']");
+  if (selectCb) {
+    if (selectCb.checked) selectedIds.add(selectCb.dataset.id);
+    else                  selectedIds.delete(selectCb.dataset.id);
+    updateExportBtn();
+  }
 });
 
 // ── Form event listeners ──────────────────────────────────────────────────────
@@ -637,11 +652,46 @@ document.getElementById("btn-cancel-edit").addEventListener("click", resetForm);
 document.getElementById("btn-open-data-dir").addEventListener("click", () => window.agentAPI.openDataDir());
 
 document.getElementById("btn-export-agents").addEventListener("click", async () => {
-  const res = await window.agentAPI.exportAgents();
-  if (res.canceled) return;
-  if (!res.success) { toast(res.error || "Export failed.", "error"); return; }
-  toast(`Exported ${res.count} agent${res.count !== 1 ? "s" : ""} successfully.`, "success");
+  if (!selectionMode) {
+    // ── Enter selection mode ─────────────────────────────────────────────────
+    if (!agents.length) { toast("No agents to export.", "info"); return; }
+    selectionMode = true;
+    selectedIds   = new Set();
+    document.getElementById("agent-list").classList.add("selection-mode");
+    document.getElementById("btn-cancel-selection").style.display = "";
+    document.getElementById("btn-import-agents").style.display    = "none";
+    updateExportBtn();
+    renderAgentList();
+    toast("Check the agents you want to export, then click Export Selected.", "info");
+  } else {
+    // ── Execute export with selected ids ─────────────────────────────────────
+    if (!selectedIds.size) { toast("Select at least one agent to export.", "info"); return; }
+    const res = await window.agentAPI.exportAgents([...selectedIds]);
+    if (res.canceled) { exitSelectionMode(); return; }
+    if (!res.success) { toast(res.error || "Export failed.", "error"); return; }
+    exitSelectionMode();
+    toast(`Exported ${res.count} agent${res.count !== 1 ? "s" : ""} successfully.`, "success");
+  }
 });
+
+document.getElementById("btn-cancel-selection").addEventListener("click", exitSelectionMode);
+
+function updateExportBtn() {
+  const btn = document.getElementById("btn-export-agents");
+  btn.textContent = selectionMode
+    ? `⬇ Export Selected${selectedIds.size ? ` (${selectedIds.size})` : ""}`
+    : "⬇ Export";
+}
+
+function exitSelectionMode() {
+  selectionMode = false;
+  selectedIds   = new Set();
+  document.getElementById("agent-list").classList.remove("selection-mode");
+  document.getElementById("btn-cancel-selection").style.display = "none";
+  document.getElementById("btn-import-agents").style.display    = "";
+  updateExportBtn();
+  renderAgentList();
+}
 
 document.getElementById("btn-import-agents").addEventListener("click", async () => {
   const res = await window.agentAPI.importAgents();

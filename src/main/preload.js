@@ -32,7 +32,7 @@ contextBridge.exposeInMainWorld("agentAPI", {
   getVersion:   () => ipcRenderer.invoke("app:getVersion"),
 
   // ── Import / Export ───────────────────────────────────────────────────────
-  exportAgents: () => ipcRenderer.invoke("agents:export"),
+  exportAgents: (ids) => ipcRenderer.invoke("agents:export", { ids }),
   importAgents: () => ipcRenderer.invoke("agents:import"),
 
   // ── Shell ─────────────────────────────────────────────────────────────────
