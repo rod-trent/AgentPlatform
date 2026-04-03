@@ -89,7 +89,7 @@ When the scheduler is running, the pill in the header shows the count of active 
 
 ## No Cloud, No Runtime, No Drama
 
-The app is a single installable `.exe` — built with Electron and packaged with electron-builder into a standard NSIS installer. After installation:
+The app is a single installable `.exe` — built with Electron and packaged with electron-builder into a standard NSIS installer that supports both **x64** and **ARM64** (including Snapdragon-based Windows PCs). The installer auto-detects your architecture and installs the right version. After installation:
 
 - **No Node.js required** on the target machine — the runtime is bundled
 - **No Python required** — no virtual environments, no `pip install`, no version conflicts

@@ -27,7 +27,7 @@ Built with [Electron](https://electronjs.org) and styled to the Windows 11 Fluen
 
 | Requirement | Version |
 |---|---|
-| Windows | 10 or 11 (x64) |
+| Windows | 10 or 11 (x64 or ARM64) |
 | [Node.js](https://nodejs.org) | 20 LTS or later |
 
 ---
