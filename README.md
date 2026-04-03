@@ -14,6 +14,7 @@ Built with [Electron](https://electronjs.org) and styled to the Windows 11 Fluen
   - **Script agents** — run any existing script or executable (Python, PowerShell, Node.js, etc.) on a schedule
 - **Cron scheduling** — pick from common presets or write your own cron expression
 - **Edit agents after creation** — change provider, model, prompts, or schedule at any time
+- **Export & import agents** — share agent definitions as portable JSON files; import packs shared by others
 - **Real-time status** — live status indicators and output display on each agent card
 - **System tray** — optionally minimize to the system tray and keep agents running in the background
 - **Windows 11 Fluent UI** — Mica material, Acrylic blur, Fluent motion, Segoe UI Variable
@@ -93,6 +94,26 @@ Calls an LLM API on a schedule with a configurable system prompt and user prompt
 Runs any existing script or executable on a schedule using `execFile` (no shell injection risk). Captures stdout + stderr and displays the output on the agent card.
 
 **Use cases:** import and schedule existing Python/PowerShell agents, data pipelines, system automation.
+
+---
+
+## Sharing Agents
+
+Agents can be exported and imported as self-contained JSON files, making it easy to share your work with others running AI Agent Platform.
+
+### Export
+
+Click the **⬇ Export** button in the Active Agents header to open a Save dialog. The exported file contains all agent definitions — name, prompts, provider, model, schedule — but strips runtime state (last run time, last result). API keys are never included.
+
+### Import
+
+Click the **⬆ Import** button and select a previously exported `.json` file. The importer:
+
+- Accepts the standard export envelope format or a bare array
+- Skips any agent whose name already exists locally (reports skipped names in the status toast)
+- Adds all new agents immediately and updates the scheduler if it is running
+
+Exported files can be shared via email, GitHub, a shared drive, or anywhere else — they are plain JSON with no credentials.
 
 ---
 

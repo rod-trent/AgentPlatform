@@ -129,6 +129,39 @@ The installer lands in `dist\AI Agent Platform Setup 1.0.0.exe`.
 
 ---
 
+## Share Your Agents
+
+One of the most requested things in any automation tool is the ability to share your work. AI Agent Platform makes that simple: every agent you create can be exported to a plain JSON file and imported by anyone else running the app.
+
+Hit **⬇ Export** in the Active Agents header and a native Save dialog appears, defaulting the filename to something like `ai-agents-2026-04-03.json`. The file contains everything needed to recreate your agents — names, prompts, providers, models, schedules — with runtime state and API keys intentionally excluded. What gets exported is the definition, not the secrets.
+
+On the receiving end, **⬆ Import** opens a file picker, reads the JSON, and adds each new agent to the local registry. If an agent with the same name already exists it is skipped rather than overwritten, and the import toast tells you exactly what happened:
+
+> *Imported 3 agents. Skipped 1 duplicate (WeatherBot).*
+
+The format is a readable JSON envelope so it can be stored in a GitHub repo, shared in a team chat, attached to a blog post, or checked into source control alongside the scripts the agents run. A community of shareable agent packs is a natural next step.
+
+```json
+{
+  "exportedBy": "AI Agent Platform",
+  "version": "1.0.0",
+  "exportedAt": "2026-04-03T12:00:00.000Z",
+  "agents": [
+    {
+      "name": "Daily News Summary",
+      "type": "prompt",
+      "provider": "anthropic",
+      "model": "claude-opus-4-6",
+      "systemPrompt": "You are a concise news summarizer...",
+      "userPrompt": "Summarize the top technology stories today.",
+      "schedule": "0 8 * * 1-5"
+    }
+  ]
+}
+```
+
+---
+
 ## What's Next
 
 This is v1.0.0 — the foundation. A few things already on the list:
@@ -137,6 +170,7 @@ This is v1.0.0 — the foundation. A few things already on the list:
 - **Notifications** — Windows toast notifications on agent completion or failure
 - **Agent chaining** — pipe the output of one agent into the input of another
 - **Import from clipboard** — paste a prompt directly from a chat session to create an agent in seconds
+- **Shared agent packs** — a community repository of ready-to-import agent collections for common tasks
 
 If you build something with it, run into a bug, or have a feature idea, open an issue on GitHub. Pull requests welcome.
 
