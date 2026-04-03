@@ -13,9 +13,9 @@
     "generate-icon": "node scripts/generate-icon.js",
     "start": "electron .",
     "prebuild": "node scripts/generate-icon.js",
-    "build": "electron-builder --win --x64",
+    "build": "electron-builder --win --x64 --arm64",
     "prebuild:dir": "node scripts/generate-icon.js",
-    "build:dir": "electron-builder --win --x64 --dir"
+    "build:dir": "electron-builder --win --x64 --arm64 --dir"
   },
   "dependencies": {
     "node-cron": "^3.0.3",
