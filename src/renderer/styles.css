@@ -1158,6 +1158,15 @@ body {
   animation: dialog-in var(--dur-medium) var(--ease-decelerate);
 }
 
+/* Allow the body to shrink and the packs-list inside it to scroll */
+#packs-dialog .dialog-body {
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .packs-loading {
   padding: 24px;
   text-align: center;
