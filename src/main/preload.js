@@ -18,6 +18,12 @@ contextBridge.exposeInMainWorld("agentAPI", {
   toggleAgent:  (id, enabled)=> ipcRenderer.invoke("agents:toggle",  { id, enabled }),
   runNow:       (id)         => ipcRenderer.invoke("agents:runNow",  { id }),
 
+  // ── Test (run without saving) ─────────────────────────────────────────────
+  testAgent:    (config)     => ipcRenderer.invoke("agents:test", config),
+
+  // ── Run history ───────────────────────────────────────────────────────────
+  getAgentHistory: (id)      => ipcRenderer.invoke("agents:getHistory", { id }),
+
   // ── Settings ──────────────────────────────────────────────────────────────
   getSettings:  ()     => ipcRenderer.invoke("settings:get"),
   saveSettings: (data) => ipcRenderer.invoke("settings:set", data),
@@ -36,13 +42,22 @@ contextBridge.exposeInMainWorld("agentAPI", {
   importAgents: () => ipcRenderer.invoke("agents:import"),
 
   // ── Shell ─────────────────────────────────────────────────────────────────
-  openDataDir:  ()           => ipcRenderer.invoke("shell:openDataDir"),
-  openFilePicker: ()         => ipcRenderer.invoke("shell:openFilePicker"),
+  openDataDir:              ()           => ipcRenderer.invoke("shell:openDataDir"),
+  openFilePicker:           ()           => ipcRenderer.invoke("shell:openFilePicker"),
+  openMarkdownInBrowser:    (md, title)  => ipcRenderer.invoke("shell:openMarkdownInBrowser", { markdown: md, title }),
+
+  // ── Clipboard ─────────────────────────────────────────────────────────────
+  readClipboard: () => ipcRenderer.invoke("clipboard:read"),
+
+  // ── Agent Packs ───────────────────────────────────────────────────────────
+  fetchAgentPacks: (url)  => ipcRenderer.invoke("packs:fetch",  { url }),
+  importAgentPack: (pack) => ipcRenderer.invoke("packs:import", { pack }),
 
   // ── Push events (main → renderer) ────────────────────────────────────────
   onStatusChanged:  (cb) => ipcRenderer.on("agent:statusChanged", (_e, d) => cb(d)),
   onRunComplete:    (cb) => ipcRenderer.on("agent:runComplete",   (_e, d) => cb(d)),
   onWorkerStatus:   (cb) => ipcRenderer.on("worker:status",       (_e, d) => cb(d)),
+  onAgentsUpdated:  (cb) => ipcRenderer.on("agents:updated",      (_e, d) => cb(d)),
 
   removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel),
 });

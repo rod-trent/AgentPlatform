@@ -1,7 +1,8 @@
 "use strict";
 
-const cron         = require("node-cron");
-const { execFile } = require("child_process");
+const cron               = require("node-cron");
+const { execFile }       = require("child_process");
+const { Notification }   = require("electron");
 const { loadRegistry, updateAgent, recordRun } = require("./registry");
 const { runPromptAgent }                       = require("./grokClient");
 
@@ -32,6 +33,23 @@ function _log(msg) {
   console.log(`[worker ${ts}] ${msg}`);
 }
 
+/** Send a native Windows toast notification (if the system supports it). */
+function _notify(title, body, type) {
+  if (!_settings?.notificationsEnabled) return;
+  try {
+    if (!Notification.isSupported()) return;
+    const n = new Notification({
+      title,
+      body,
+      // urgency maps to Windows notification level
+      urgency: type === "error" ? "critical" : "normal",
+    });
+    n.show();
+  } catch (err) {
+    _log(`notification error: ${err.message}`);
+  }
+}
+
 function _runScriptAgent(agent) {
   return new Promise((resolve, reject) => {
     const args = [
@@ -48,7 +66,12 @@ function _runScriptAgent(agent) {
   });
 }
 
-async function _executeAgent(agentId) {
+/**
+ * Execute a single agent by ID.
+ * @param {string} agentId
+ * @param {string|null} chainedInput  If set, overrides the agent's userPrompt for this run.
+ */
+async function _executeAgent(agentId, chainedInput = null) {
   if (runningAgents.has(agentId)) {
     _log(`[${agentId}] skipped — previous run still in progress`);
     return;
@@ -71,7 +94,11 @@ async function _executeAgent(agentId) {
 
   try {
     if (agent.type === "prompt") {
-      result = await runPromptAgent(agent, _settings);
+      // If chained, inject the upstream output as the user prompt
+      const effectiveAgent = chainedInput
+        ? { ...agent, userPrompt: String(chainedInput) }
+        : agent;
+      result = await runPromptAgent(effectiveAgent, _settings);
     } else if (agent.type === "script") {
       result = await _runScriptAgent(agent);
     }
@@ -86,7 +113,24 @@ async function _executeAgent(agentId) {
   _push("agent:runComplete", { id: agentId, status, result, duration, timestamp: new Date().toISOString() });
   _log(`[${agent.name}] ${status} in ${duration}ms`);
 
+  // Windows toast notification
+  if (status === "success") {
+    _notify("AI Agent Platform", `✓ ${agent.name} completed`, "success");
+  } else {
+    _notify("AI Agent Platform", `✗ ${agent.name} failed`, "error");
+  }
+
   runningAgents.delete(agentId);
+
+  // ── Agent chaining ─────────────────────────────────────────────────────────
+  // Fire chained agents with this result as their input (only on success)
+  if (status === "success" && Array.isArray(agent.chainTo) && agent.chainTo.length) {
+    for (const chainId of agent.chainTo) {
+      _log(`[${agent.name}] chaining to ${chainId}`);
+      // Small delay so the UI can update before the next run starts
+      setTimeout(() => _executeAgent(chainId, result), 300);
+    }
+  }
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -167,4 +211,30 @@ function isRunning(agentId) {
   return runningAgents.has(agentId);
 }
 
-module.exports = { init, setSettings, rebuildSchedule, triggerAgent, stopAll, scheduledCount, isRunning };
+/**
+ * Run an agent config directly without it being saved — used for the Test feature.
+ * Returns { status, result }.
+ */
+async function testAgentConfig(config, settings) {
+  const effectiveSettings = settings || _settings;
+  let status = "success";
+  let result = "";
+  try {
+    if (config.type === "prompt") {
+      result = await runPromptAgent(config, effectiveSettings);
+    } else if (config.type === "script") {
+      result = await _runScriptAgent(config);
+    } else {
+      result = "(unknown agent type)";
+    }
+  } catch (err) {
+    status = "error";
+    result = err.message || String(err);
+  }
+  return { status, result };
+}
+
+module.exports = {
+  init, setSettings, rebuildSchedule, triggerAgent, stopAll,
+  scheduledCount, isRunning, testAgentConfig,
+};

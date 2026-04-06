@@ -81,7 +81,10 @@
                     placeholder="You are a helpful assistant that…"></textarea>
         </div>
         <div class="fluent-input-wrap">
-          <label class="fluent-label" for="f-user">User Prompt</label>
+          <div class="label-row">
+            <label class="fluent-label" for="f-user">User Prompt</label>
+            <button class="inline-action-btn" id="btn-paste-prompt" title="Paste from clipboard">📋 Paste</button>
+          </div>
           <textarea class="fluent-textarea" id="f-user" rows="3"
                     placeholder="What should the agent ask?"></textarea>
         </div>
@@ -106,8 +109,7 @@
           <label class="fluent-label">Temperature — <span id="temp-val">0.7</span></label>
           <div class="slider-row">
             <input class="fluent-slider" id="f-temp" type="range"
-                   min="0" max="2" step="0.1" value="0.7"
-                   />
+                   min="0" max="2" step="0.1" value="0.7" />
           </div>
         </div>
       </div>
@@ -135,7 +137,18 @@
 
       <div class="separator"></div>
 
-      <!-- Schedule -->
+      <!-- ── Agent chaining ── -->
+      <div class="fluent-input-wrap">
+        <label class="fluent-label">Chain To <span style="opacity:.5">(optional — run another agent with this output)</span></label>
+        <select class="fluent-select" id="f-chain-to">
+          <option value="">— None —</option>
+          <!-- Populated by app.js with existing agents -->
+        </select>
+      </div>
+
+      <div class="separator"></div>
+
+      <!-- ── Schedule ── -->
       <div class="fluent-input-wrap">
         <label class="fluent-label" for="f-schedule-pick">Schedule</label>
         <select class="fluent-select" id="f-schedule-pick">
@@ -155,19 +168,102 @@
           <option value="custom">Custom cron…</option>
         </select>
       </div>
-      <div id="custom-cron-row" class="fluent-input-wrap" style="display:none">
-        <label class="fluent-label" for="f-cron">Cron Expression</label>
-        <input class="fluent-input" id="f-cron" type="text"
-               placeholder="*/10 * * * *" spellcheck="false" autocomplete="off" />
+
+      <!-- Custom cron builder (shown when "Custom cron…" is selected) -->
+      <div id="custom-cron-row" style="display:none">
+        <!-- Builder / Expression tabs -->
+        <div class="cron-tabs">
+          <button class="cron-tab active" id="cron-tab-builder">Builder</button>
+          <button class="cron-tab" id="cron-tab-expr">Expression</button>
+        </div>
+
+        <!-- Builder panel -->
+        <div id="cron-builder-panel" class="fluent-input-wrap">
+          <div class="cron-builder-grid">
+            <div class="cron-builder-col">
+              <label class="fluent-label">Frequency</label>
+              <select class="fluent-select" id="cron-freq">
+                <option value="minute">Every N minutes</option>
+                <option value="hour">Every N hours</option>
+                <option value="daily">Daily at time</option>
+                <option value="weekly">Weekly on day</option>
+                <option value="monthly">Monthly on date</option>
+              </select>
+            </div>
+
+            <!-- minute: N -->
+            <div class="cron-builder-col" id="cron-opt-minute">
+              <label class="fluent-label">Every (mins)</label>
+              <input class="fluent-input" id="cron-every-min" type="number" value="10" min="1" max="59" />
+            </div>
+
+            <!-- hour: N -->
+            <div class="cron-builder-col" id="cron-opt-hour" style="display:none">
+              <label class="fluent-label">Every (hrs)</label>
+              <input class="fluent-input" id="cron-every-hr" type="number" value="1" min="1" max="23" />
+            </div>
+
+            <!-- daily / weekly / monthly: time -->
+            <div class="cron-builder-col" id="cron-opt-time" style="display:none">
+              <label class="fluent-label">At time</label>
+              <input class="fluent-input" id="cron-time" type="time" value="09:00" />
+            </div>
+
+            <!-- weekly: day of week -->
+            <div class="cron-builder-col" id="cron-opt-dow" style="display:none">
+              <label class="fluent-label">Day</label>
+              <select class="fluent-select" id="cron-dow">
+                <option value="0">Sunday</option>
+                <option value="1">Monday</option>
+                <option value="2">Tuesday</option>
+                <option value="3">Wednesday</option>
+                <option value="4">Thursday</option>
+                <option value="5">Friday</option>
+                <option value="6">Saturday</option>
+              </select>
+            </div>
+
+            <!-- monthly: day of month -->
+            <div class="cron-builder-col" id="cron-opt-dom" style="display:none">
+              <label class="fluent-label">Day of month</label>
+              <input class="fluent-input" id="cron-dom" type="number" value="1" min="1" max="28" />
+            </div>
+          </div>
+          <div class="cron-preview" id="cron-preview">
+            <span class="cron-preview-label">Expression:</span>
+            <code id="cron-preview-expr">*/10 * * * *</code>
+            <span class="cron-preview-desc" id="cron-preview-desc">every 10 minutes</span>
+          </div>
+        </div>
+
+        <!-- Direct expression panel -->
+        <div id="cron-expr-panel" class="fluent-input-wrap" style="display:none">
+          <label class="fluent-label" for="f-cron">Cron Expression</label>
+          <input class="fluent-input" id="f-cron" type="text"
+                 placeholder="*/10 * * * *" spellcheck="false" autocomplete="off" />
+          <span class="cron-expr-hint">min&nbsp;&nbsp;hour&nbsp;&nbsp;day&nbsp;&nbsp;month&nbsp;&nbsp;weekday</span>
+        </div>
       </div>
 
-      <!-- Submit / Cancel edit -->
-      <button class="fluent-btn accent" id="btn-add-agent" style="width:100%;height:36px;font-size:13px">
-        + &nbsp;Add Agent
-      </button>
+      <!-- Submit / Cancel edit row -->
+      <div class="form-btn-row">
+        <button class="fluent-btn" id="btn-test-agent" title="Run this configuration once without saving">▶ Test</button>
+        <button class="fluent-btn accent" id="btn-add-agent" style="flex:1;height:36px;font-size:13px">
+          + &nbsp;Add Agent
+        </button>
+      </div>
       <button class="fluent-btn" id="btn-cancel-edit" style="width:100%;height:32px;font-size:12px;display:none">
         Cancel Edit
       </button>
+
+      <!-- Test output panel (shown after Test is clicked) -->
+      <div id="test-output-wrap" style="display:none">
+        <div class="test-output-header">
+          <span id="test-output-status"></span>
+          <button class="inline-action-btn" id="btn-test-copy" title="Copy output">📋 Copy</button>
+        </div>
+        <div class="card-output open" id="test-output"></div>
+      </div>
     </div>
   </aside>
 
@@ -177,6 +273,7 @@
       <div class="list-header">
         <span class="list-title">Active Agents</span>
         <span id="agent-count">0 agents</span>
+        <button class="fluent-btn" id="btn-browse-packs" title="Browse community agent packs">🌐 Packs</button>
         <button class="fluent-btn" id="btn-import-agents" title="Import agents from a JSON file">⬆ Import</button>
         <button class="fluent-btn" id="btn-cancel-selection" style="display:none" title="Cancel export selection">✕ Cancel</button>
         <button class="fluent-btn accent" id="btn-export-agents" title="Export agents to a JSON file">⬇ Export</button>
@@ -187,12 +284,46 @@
       <div id="empty-state">
         <div class="empty-icon">🤖</div>
         <h3>No agents yet</h3>
-        <p>Create your first agent using the panel on the left. Use the <strong>Prompt</strong> tab to call any AI provider, or the <strong>Script</strong> tab to run — or import — any existing script or executable.</p>
+        <p>Create your first agent using the panel on the left. Use the <strong>Prompt</strong> tab to call any AI provider, or the <strong>Script</strong> tab to run any existing script or executable.</p>
       </div>
     </div>
   </main>
 
 </div><!-- /layout -->
+
+<!-- ── History dialog ─────────────────────────────────────────────────────── -->
+<div id="history-overlay">
+  <div id="history-dialog">
+    <div class="dialog-title-bar">
+      <div class="dialog-icon">📋</div>
+      <div class="dialog-title" id="history-title">Run History</div>
+      <button class="fluent-btn icon-only" id="btn-close-history" style="margin-left:auto">✕</button>
+    </div>
+    <div id="history-list" class="history-list"></div>
+  </div>
+</div>
+
+<!-- ── Agent Packs dialog ─────────────────────────────────────────────────── -->
+<div id="packs-overlay">
+  <div id="packs-dialog">
+    <div class="dialog-title-bar">
+      <div class="dialog-icon">🌐</div>
+      <div class="dialog-title">Community Agent Packs</div>
+      <button class="fluent-btn icon-only" id="btn-close-packs" style="margin-left:auto">✕</button>
+    </div>
+    <div class="dialog-body" style="padding-bottom:8px">
+      <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">
+        Ready-to-import agent collections. Click <strong>Install</strong> to add all agents in a pack.
+      </p>
+      <div id="packs-loading" class="packs-loading">Loading packs…</div>
+      <div id="packs-error"  class="callout-error" style="display:none"></div>
+      <div id="packs-list"   class="packs-list"></div>
+    </div>
+    <div class="dialog-footer">
+      <button class="fluent-btn" id="btn-close-packs-footer">Close</button>
+    </div>
+  </div>
+</div>
 
 <!-- ── Settings dialog (Fluent ContentDialog) ─────────────────────────────── -->
 <div id="modal-overlay">
@@ -232,6 +363,19 @@
         </div>
         <label class="f-toggle">
           <input type="checkbox" id="s-run-at-startup" />
+          <div class="f-track"></div>
+          <div class="f-thumb"></div>
+        </label>
+      </div>
+
+      <!-- Notifications toggle -->
+      <div class="setting-row">
+        <div class="setting-row-text">
+          <div class="setting-row-label">Windows Notifications</div>
+          <div class="setting-row-sub">Show a toast notification when an agent completes or fails</div>
+        </div>
+        <label class="f-toggle">
+          <input type="checkbox" id="s-notifications" checked />
           <div class="f-track"></div>
           <div class="f-thumb"></div>
         </label>

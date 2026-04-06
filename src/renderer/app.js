@@ -25,6 +25,7 @@ let selectedIds     = new Set(); // agent ids checked for export
   workerActive = status.running;
 
   populateFormProviders(settings.defaultProvider);
+  populateChainToDropdown();
   updateWorkerPill(status.running, status.scheduledCount);
   renderAgentList();
 
@@ -43,6 +44,12 @@ let selectedIds     = new Set(); // agent ids checked for export
   window.agentAPI.onWorkerStatus(({ running, scheduledCount }) => {
     workerActive = running;
     updateWorkerPill(running, scheduledCount);
+  });
+
+  window.agentAPI.onAgentsUpdated((updated) => {
+    agents = updated;
+    renderAgentList();
+    populateChainToDropdown();
   });
 })();
 
@@ -89,6 +96,20 @@ function getSelectedModel() {
     return document.getElementById("f-model-custom")?.value.trim() || "";
   }
   return modelSel.value;
+}
+
+// ── Chain-to dropdown ─────────────────────────────────────────────────────────
+
+function populateChainToDropdown(excludeId) {
+  const sel = document.getElementById("f-chain-to");
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = `<option value="">— None —</option>` +
+    agents
+      .filter(a => a.id !== excludeId)
+      .map(a => `<option value="${a.id}">${esc(a.name)}</option>`)
+      .join("");
+  if (current && sel.querySelector(`option[value="${current}"]`)) sel.value = current;
 }
 
 // ── Worker pill ───────────────────────────────────────────────────────────────
@@ -165,8 +186,15 @@ function cardHTML(a) {
   const provBadge  = a.type === "prompt"
     ? `<span class="fluent-badge" style="background:rgba(255,255,255,0.07);color:var(--text-secondary)">${esc(provider.name || a.provider || "")}</span>`
     : "";
-  const hasOutput = !!(a.lastResult);
-  const outputId  = `out-${a.id}`;
+
+  const chainedAgent = a.chainTo?.length ? agents.find(x => x.id === a.chainTo[0]) : null;
+  const chainBadge   = chainedAgent
+    ? `<span class="fluent-badge badge-chain" title="Chains to ${esc(chainedAgent.name)}">⛓ ${esc(chainedAgent.name)}</span>`
+    : "";
+
+  const hasOutput  = !!(a.lastResult);
+  const hasHistory = true; // History button always shown after first run
+  const outputId   = `out-${a.id}`;
 
   const selectCb = selectionMode
     ? `<input type="checkbox" class="agent-select-cb" data-action="select" data-id="${a.id}"
@@ -181,7 +209,7 @@ function cardHTML(a) {
     <div class="card-info">
       <div class="card-name">${esc(a.name)}</div>
       <div class="card-meta">
-        ${typeBadge}${provBadge}
+        ${typeBadge}${provBadge}${chainBadge}
         <span class="card-meta-item">⏱ ${esc(a.schedule)}</span>
         ${a.lastRun ? `<span class="card-meta-item">↻ ${timeAgo(a.lastRun)}</span>` : ""}
         ${a.model ? `<span class="card-meta-item" style="font-family:monospace">${esc(a.model)}</span>` : ""}
@@ -199,7 +227,12 @@ function cardHTML(a) {
   </div>
   <div class="card-row-bottom">
     <span class="card-status-text ${dotClass}">${statusLine}</span>
-    ${hasOutput ? `<button class="card-btn" data-action="output" data-target="${outputId}">Output</button>` : ""}
+    ${hasOutput ? `
+      <button class="card-btn" data-action="copy-output" data-id="${a.id}" title="Copy output to clipboard">📋</button>
+      <button class="card-btn" data-action="open-html" data-id="${a.id}" title="Open output as HTML in browser">🌐</button>
+      <button class="card-btn" data-action="output" data-target="${outputId}">Output</button>
+    ` : ""}
+    ${a.lastRun ? `<button class="card-btn" data-action="history" data-id="${a.id}" title="View run history">History</button>` : ""}
     <button class="card-btn" data-action="edit" data-id="${a.id}">✎ Edit</button>
     <button class="card-btn run" data-action="run" data-id="${a.id}">▶ Run Now</button>
     <button class="card-btn del" data-action="delete" data-id="${a.id}">✕</button>
@@ -246,6 +279,24 @@ function toggleOutput(outputId) {
   document.getElementById(outputId)?.classList.toggle("open");
 }
 
+async function copyOutput(id) {
+  const a = agents.find(x => x.id === id);
+  if (!a?.lastResult) return;
+  try {
+    await navigator.clipboard.writeText(a.lastResult);
+    toast("Output copied to clipboard.", "success");
+  } catch {
+    toast("Could not copy to clipboard.", "error");
+  }
+}
+
+async function openOutputAsHtml(id) {
+  const a = agents.find(x => x.id === id);
+  if (!a?.lastResult) return;
+  const res = await window.agentAPI.openMarkdownInBrowser(a.lastResult, a.name);
+  if (!res.success) toast("Could not open in browser.", "error");
+}
+
 async function toggleAgent(id, enabled) {
   const res = await window.agentAPI.toggleAgent(id, enabled);
   if (!res.success) { toast(res.error, "error"); return; }
@@ -271,11 +322,67 @@ async function deleteAgent(id) {
   if (res.success) {
     agents = agents.filter(x => x.id !== id);
     renderAgentList();
+    populateChainToDropdown();
     toast("Agent deleted.");
   } else {
     toast(res.error, "error");
   }
 }
+
+// ── History dialog ────────────────────────────────────────────────────────────
+async function showHistory(id) {
+  const a = agents.find(x => x.id === id);
+  document.getElementById("history-title").textContent =
+    `Run History — ${a?.name || id}`;
+
+  const entries = await window.agentAPI.getAgentHistory(id);
+  const listEl  = document.getElementById("history-list");
+
+  if (!entries.length) {
+    listEl.innerHTML = `<div class="history-empty">No history yet.</div>`;
+  } else {
+    listEl.innerHTML = entries.map((e, i) => `
+      <div class="history-entry">
+        <div class="history-entry-header">
+          <span class="history-status ${e.status === "success" ? "success" : "error"}">
+            ${e.status === "success" ? "✓" : "✗"} ${e.status}
+          </span>
+          <span class="history-ts">${new Date(e.timestamp).toLocaleString()}</span>
+          ${e.result ? `
+            <button class="inline-action-btn" data-hcopy="${i}" title="Copy">📋</button>
+            <button class="inline-action-btn" data-hhtml="${i}" title="Open as HTML">🌐</button>
+          ` : ""}
+        </div>
+        ${e.result ? `<div class="history-result" id="hist-result-${i}">${esc(e.result)}</div>` : ""}
+      </div>
+    `).join("");
+
+    // Wire up copy / open-html buttons inside history
+    listEl.querySelectorAll("[data-hcopy]").forEach(btn => {
+      const idx = parseInt(btn.dataset.hcopy, 10);
+      btn.addEventListener("click", async () => {
+        await navigator.clipboard.writeText(entries[idx].result || "");
+        toast("Copied to clipboard.", "success");
+      });
+    });
+    listEl.querySelectorAll("[data-hhtml]").forEach(btn => {
+      const idx = parseInt(btn.dataset.hhtml, 10);
+      btn.addEventListener("click", async () => {
+        await window.agentAPI.openMarkdownInBrowser(entries[idx].result || "", a?.name || "Output");
+      });
+    });
+  }
+
+  document.getElementById("history-overlay").classList.add("open");
+}
+
+document.getElementById("btn-close-history").addEventListener("click", () => {
+  document.getElementById("history-overlay").classList.remove("open");
+});
+document.getElementById("history-overlay").addEventListener("click", e => {
+  if (e.target === e.currentTarget)
+    document.getElementById("history-overlay").classList.remove("open");
+});
 
 // ── Edit Agent ────────────────────────────────────────────────────────────────
 function editAgent(id) {
@@ -297,6 +404,11 @@ function editAgent(id) {
   document.getElementById("f-name").value = a.name;
   document.getElementById("f-desc").value = a.description || "";
 
+  // Chain-to
+  populateChainToDropdown(id);
+  const chainSel = document.getElementById("f-chain-to");
+  chainSel.value = (a.chainTo && a.chainTo[0]) ? a.chainTo[0] : "";
+
   // Schedule
   const sched = document.getElementById("f-schedule-pick");
   const knownOption = [...sched.options].find(o => o.value === a.schedule);
@@ -305,7 +417,10 @@ function editAgent(id) {
     document.getElementById("custom-cron-row").style.display = "none";
   } else {
     sched.value = "custom";
+    // Fill the expression tab
     document.getElementById("f-cron").value = a.schedule;
+    // Show expression tab directly for existing custom expressions
+    setCronTab("expr");
     document.getElementById("custom-cron-row").style.display = "";
   }
 
@@ -339,6 +454,7 @@ function editAgent(id) {
   }
 
   clearFormError();
+  hideTestOutput();
   document.getElementById("sidebar-body").scrollTop = 0;
 }
 
@@ -353,12 +469,25 @@ function setFormType(type) {
 
 function onScheduleChange() {
   const v = document.getElementById("f-schedule-pick").value;
-  document.getElementById("custom-cron-row").style.display = v === "custom" ? "" : "none";
+  if (v === "custom") {
+    document.getElementById("custom-cron-row").style.display = "";
+    setCronTab("builder");
+    rebuildCronFromBuilder();
+  } else {
+    document.getElementById("custom-cron-row").style.display = "none";
+  }
 }
 
 function getSchedule() {
   const v = document.getElementById("f-schedule-pick").value;
-  return v === "custom" ? document.getElementById("f-cron").value.trim() : v;
+  if (v !== "custom") return v;
+  // Check which cron sub-tab is active
+  const exprPanel = document.getElementById("cron-expr-panel");
+  if (exprPanel.style.display !== "none") {
+    return document.getElementById("f-cron").value.trim();
+  }
+  // Builder mode — read from preview
+  return document.getElementById("cron-preview-expr").textContent.trim();
 }
 
 async function pickScriptFile() {
@@ -370,26 +499,24 @@ function showFormError(msg) {
   const el = document.getElementById("form-error");
   el.textContent = msg;
   el.classList.add("visible");
-  // Scroll to top so the error and relevant fields are visible
   document.getElementById("sidebar-body").scrollTop = 0;
 }
 function clearFormError() {
   document.getElementById("form-error").classList.remove("visible");
 }
 
-async function submitAddAgent() {
-  clearFormError();
-  const name = document.getElementById("f-name").value.trim();
-  if (!name) { showFormError("Name is required."); return; }
-
+/** Collect form payload (shared between submit and test). */
+function collectFormPayload() {
+  const name     = document.getElementById("f-name").value.trim();
   const schedule = getSchedule();
-  if (!schedule) { showFormError("Select or enter a schedule."); return; }
+  const chainVal = document.getElementById("f-chain-to").value;
 
   const payload = {
     name,
     description: document.getElementById("f-desc").value.trim(),
     type: formType,
     schedule,
+    chainTo: chainVal ? [chainVal] : [],
   };
 
   if (formType === "prompt") {
@@ -398,40 +525,46 @@ async function submitAddAgent() {
     payload.provider     = document.getElementById("f-provider")?.value || "xai";
     payload.model        = getSelectedModel();
     payload.temperature  = parseFloat(document.getElementById("f-temp").value);
-    if (!payload.userPrompt) { showFormError("User Prompt is required."); return; }
-    if (!payload.model)      { showFormError("Model name is required."); return; }
   } else {
     payload.command    = document.getElementById("f-command").value.trim();
     payload.scriptPath = document.getElementById("f-script-path").value.trim();
     payload.timeoutMs  = parseInt(document.getElementById("f-timeout").value, 10) * 1000;
-    if (!payload.command) { showFormError("Command is required."); return; }
+  }
+  return payload;
+}
+
+async function submitAddAgent() {
+  clearFormError();
+  const payload = collectFormPayload();
+  if (!payload.name) { showFormError("Name is required."); return; }
+  if (!payload.schedule) { showFormError("Select or enter a schedule."); return; }
+  if (formType === "prompt") {
+    if (!payload.userPrompt) { showFormError("User Prompt is required."); return; }
+    if (!payload.model)      { showFormError("Model name is required."); return; }
+  } else {
+    if (!payload.command)    { showFormError("Command is required."); return; }
   }
 
   if (editingAgentId) {
-    // ── Update existing agent ────────────────────────────────────────────────
     const res = await window.agentAPI.updateAgent({ id: editingAgentId, ...payload });
     if (!res.success) { showFormError(res.error); return; }
-
     const idx = agents.findIndex(a => a.id === editingAgentId);
     if (idx !== -1) agents[idx] = res.agent;
     renderAgentList();
     resetForm();
     toast(`"${res.agent.name}" updated!`, "success");
-
     if (workerActive) {
       const s = await window.agentAPI.getWorkerStatus();
       updateWorkerPill(true, s.scheduledCount);
     }
   } else {
-    // ── Create new agent ─────────────────────────────────────────────────────
     const res = await window.agentAPI.createAgent(payload);
     if (!res.success) { showFormError(res.error); return; }
-
     agents.push(res.agent);
     renderAgentList();
+    populateChainToDropdown();
     resetForm();
     toast(`"${res.agent.name}" created!`, "success");
-
     if (workerActive) {
       const s = await window.agentAPI.getWorkerStatus();
       updateWorkerPill(true, s.scheduledCount);
@@ -439,10 +572,229 @@ async function submitAddAgent() {
   }
 }
 
+// ── Test agent ────────────────────────────────────────────────────────────────
+async function testAgent() {
+  clearFormError();
+  const payload = collectFormPayload();
+
+  if (formType === "prompt") {
+    if (!payload.userPrompt) { showFormError("User Prompt is required to test."); return; }
+    if (!payload.model)      { showFormError("Model name is required to test."); return; }
+  } else {
+    if (!payload.command)    { showFormError("Command is required to test."); return; }
+  }
+
+  const btn = document.getElementById("btn-test-agent");
+  btn.textContent = "⏳ Testing…";
+  btn.disabled    = true;
+
+  showTestOutput("Running test…", "info");
+
+  const res = await window.agentAPI.testAgent(payload);
+
+  btn.textContent = "▶ Test";
+  btn.disabled    = false;
+
+  if (res.success) {
+    showTestOutput(res.result, res.status === "success" ? "success" : "error");
+    if (res.status === "error") {
+      toast("Test failed — see output below.", "error");
+    } else {
+      toast("Test completed successfully.", "success");
+    }
+  } else {
+    showTestOutput(res.error || "Test failed.", "error");
+    toast(res.error || "Test failed.", "error");
+  }
+}
+
+function showTestOutput(text, status) {
+  const wrap   = document.getElementById("test-output-wrap");
+  const out    = document.getElementById("test-output");
+  const statEl = document.getElementById("test-output-status");
+  const icons  = { success: "✓ Success", error: "✗ Error", info: "⏳ Running" };
+  statEl.textContent = icons[status] || "";
+  statEl.className   = `test-status-label ${status || ""}`;
+  out.textContent    = text || "";
+  wrap.style.display = "";
+  document.getElementById("sidebar-body").scrollTop =
+    document.getElementById("sidebar-body").scrollHeight;
+}
+
+function hideTestOutput() {
+  document.getElementById("test-output-wrap").style.display = "none";
+}
+
+document.getElementById("btn-test-agent").addEventListener("click", testAgent);
+
+document.getElementById("btn-test-copy").addEventListener("click", async () => {
+  const text = document.getElementById("test-output").textContent;
+  if (!text) return;
+  await navigator.clipboard.writeText(text);
+  toast("Test output copied.", "success");
+});
+
+// ── Clipboard paste ───────────────────────────────────────────────────────────
+document.getElementById("btn-paste-prompt").addEventListener("click", async () => {
+  try {
+    const text = await window.agentAPI.readClipboard();
+    if (!text) { toast("Clipboard is empty.", "info"); return; }
+    document.getElementById("f-user").value = text;
+    toast("Prompt pasted from clipboard.", "success");
+  } catch {
+    toast("Could not read clipboard.", "error");
+  }
+});
+
+// ── Custom cron builder ───────────────────────────────────────────────────────
+
+// Tab switching
+function setCronTab(tab) {
+  const isBuilder = tab === "builder";
+  document.getElementById("cron-tab-builder").classList.toggle("active", isBuilder);
+  document.getElementById("cron-tab-expr").classList.toggle("active", !isBuilder);
+  document.getElementById("cron-builder-panel").style.display = isBuilder ? "" : "none";
+  document.getElementById("cron-expr-panel").style.display    = isBuilder ? "none" : "";
+}
+
+document.getElementById("cron-tab-builder").addEventListener("click", () => setCronTab("builder"));
+document.getElementById("cron-tab-expr").addEventListener("click",    () => setCronTab("expr"));
+
+// Show/hide builder sub-fields based on frequency selection
+function onCronFreqChange() {
+  const freq = document.getElementById("cron-freq").value;
+  document.getElementById("cron-opt-minute").style.display = freq === "minute" ? "" : "none";
+  document.getElementById("cron-opt-hour").style.display   = freq === "hour"   ? "" : "none";
+  document.getElementById("cron-opt-time").style.display   = ["daily","weekly","monthly"].includes(freq) ? "" : "none";
+  document.getElementById("cron-opt-dow").style.display    = freq === "weekly"  ? "" : "none";
+  document.getElementById("cron-opt-dom").style.display    = freq === "monthly" ? "" : "none";
+  rebuildCronFromBuilder();
+}
+
+function rebuildCronFromBuilder() {
+  const freq   = document.getElementById("cron-freq").value;
+  const evMin  = parseInt(document.getElementById("cron-every-min").value, 10) || 10;
+  const evHr   = parseInt(document.getElementById("cron-every-hr").value,  10) || 1;
+  const time   = document.getElementById("cron-time").value || "09:00";
+  const [hh, mm] = time.split(":").map(Number);
+  const dow    = document.getElementById("cron-dow").value || "1";
+  const dom    = parseInt(document.getElementById("cron-dom").value, 10) || 1;
+
+  let expr = "";
+  let desc = "";
+
+  switch (freq) {
+    case "minute":
+      expr = `*/${evMin} * * * *`;
+      desc = `every ${evMin} minute${evMin !== 1 ? "s" : ""}`;
+      break;
+    case "hour":
+      expr = `0 */${evHr} * * *`;
+      desc = `every ${evHr} hour${evHr !== 1 ? "s" : ""}`;
+      break;
+    case "daily":
+      expr = `${mm} ${hh} * * *`;
+      desc = `daily at ${time}`;
+      break;
+    case "weekly": {
+      const days = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+      expr = `${mm} ${hh} * * ${dow}`;
+      desc = `every ${days[parseInt(dow, 10)]} at ${time}`;
+      break;
+    }
+    case "monthly":
+      expr = `${mm} ${hh} ${dom} * *`;
+      desc = `monthly on day ${dom} at ${time}`;
+      break;
+  }
+
+  document.getElementById("cron-preview-expr").textContent = expr;
+  document.getElementById("cron-preview-desc").textContent = desc;
+}
+
+// Wire up builder inputs
+document.getElementById("cron-freq").addEventListener("change", onCronFreqChange);
+["cron-every-min","cron-every-hr","cron-time","cron-dow","cron-dom"].forEach(id => {
+  document.getElementById(id).addEventListener("input", rebuildCronFromBuilder);
+  document.getElementById(id).addEventListener("change", rebuildCronFromBuilder);
+});
+
+// ── Community Packs ───────────────────────────────────────────────────────────
+document.getElementById("btn-browse-packs").addEventListener("click", openPacksBrowser);
+document.getElementById("btn-close-packs").addEventListener("click", closePacksBrowser);
+document.getElementById("btn-close-packs-footer").addEventListener("click", closePacksBrowser);
+document.getElementById("packs-overlay").addEventListener("click", e => {
+  if (e.target === e.currentTarget) closePacksBrowser();
+});
+
+async function openPacksBrowser() {
+  document.getElementById("packs-overlay").classList.add("open");
+  document.getElementById("packs-loading").style.display = "";
+  document.getElementById("packs-list").innerHTML  = "";
+  document.getElementById("packs-error").style.display = "none";
+
+  const res = await window.agentAPI.fetchAgentPacks();
+  document.getElementById("packs-loading").style.display = "none";
+
+  if (!res.success) {
+    const errEl = document.getElementById("packs-error");
+    errEl.textContent = `Could not load packs: ${res.error}`;
+    errEl.style.display = "";
+    return;
+  }
+
+  const packs = res.packs;
+  if (!packs.length) {
+    document.getElementById("packs-list").innerHTML =
+      `<div class="history-empty">No packs found.</div>`;
+    return;
+  }
+
+  document.getElementById("packs-list").innerHTML = packs.map((p, i) => `
+    <div class="pack-card" id="pack-${i}">
+      <div class="pack-card-info">
+        <div class="pack-name">${esc(p.name)}</div>
+        <div class="pack-desc">${esc(p.description || "")}</div>
+        <div class="pack-meta">
+          ${p.author ? `<span>by ${esc(p.author)}</span>` : ""}
+          <span>${(p.agents || []).length} agent${(p.agents || []).length !== 1 ? "s" : ""}</span>
+        </div>
+      </div>
+      <button class="fluent-btn accent" data-pack-idx="${i}" id="pack-btn-${i}">Install</button>
+    </div>
+  `).join("");
+
+  document.getElementById("packs-list").addEventListener("click", async e => {
+    const btn = e.target.closest("[data-pack-idx]");
+    if (!btn) return;
+    const idx  = parseInt(btn.dataset.packIdx, 10);
+    const pack = packs[idx];
+    btn.textContent = "Installing…";
+    btn.disabled    = true;
+    const res = await window.agentAPI.importAgentPack(pack);
+    if (res.success) {
+      btn.textContent = `✓ Installed (${res.imported})`;
+      agents = await window.agentAPI.listAgents();
+      renderAgentList();
+      populateChainToDropdown();
+      let msg = `Installed ${res.imported} agent${res.imported !== 1 ? "s" : ""} from "${pack.name}".`;
+      if (res.skipped?.length) msg += ` Skipped ${res.skipped.length} duplicate(s).`;
+      toast(msg, res.imported ? "success" : "info");
+    } else {
+      btn.textContent = "✕ Failed";
+      toast(res.error || "Import failed.", "error");
+    }
+  });
+}
+
+function closePacksBrowser() {
+  document.getElementById("packs-overlay").classList.remove("open");
+}
+
+// ── Reset form ────────────────────────────────────────────────────────────────
 function resetForm() {
   editingAgentId = null;
 
-  // Restore sidebar header
   document.getElementById("pane-title").textContent = "Add Agent";
   document.getElementById("pane-sub").textContent   = "Prompt or script-based";
   document.getElementById("btn-add-agent").textContent = "+ \u00a0Add Agent";
@@ -455,9 +807,12 @@ function resetForm() {
   document.getElementById("f-timeout").value = "30";
   document.getElementById("f-temp").value = "0.7";
   document.getElementById("temp-val").textContent = "0.7";
+  document.getElementById("f-chain-to").value = "";
   setFormType("prompt");
-  onProviderChange(); // reset model list to first provider's defaults
+  onProviderChange();
   clearFormError();
+  hideTestOutput();
+  populateChainToDropdown();
 }
 
 // ── Settings dialog ───────────────────────────────────────────────────────────
@@ -466,7 +821,6 @@ document.getElementById("btn-cancel-settings").addEventListener("click", closeSe
 document.getElementById("btn-save-settings").addEventListener("click", saveSettings);
 document.getElementById("btn-toggle-key-vis").addEventListener("click", toggleKeyVis);
 
-// Close when clicking the backdrop (but not the dialog itself)
 document.getElementById("modal-overlay").addEventListener("click", closeSettings);
 document.getElementById("settings-dialog").addEventListener("click", e => e.stopPropagation());
 
@@ -479,7 +833,6 @@ async function openSettings() {
   const verEl = document.getElementById("settings-version");
   if (verEl) verEl.textContent = version ? `v${version}` : "";
 
-  // Default provider dropdown
   const defSel = document.getElementById("s-default-provider");
   defSel.innerHTML = Object.entries(PROVIDERS)
     .map(([id, p]) => `<option value="${id}">${p.name}</option>`)
@@ -487,11 +840,10 @@ async function openSettings() {
   defSel.value = settings.defaultProvider || Object.keys(PROVIDERS)[0] || "xai";
   document.getElementById("s-minimize-to-tray").checked = settings.minimizeToTray !== false;
   document.getElementById("s-run-at-startup").checked   = !!settings.runAtStartup;
+  document.getElementById("s-notifications").checked    = settings.notificationsEnabled !== false;
 
-  // Stash settings so selectSettingsProvider can read them when chips are clicked
   document.getElementById("settings-dialog").dataset.settings = JSON.stringify(settings);
 
-  // Provider chips — no inline onclick; wire up listeners after injection
   const chipsEl = document.getElementById("provider-chips");
   chipsEl.innerHTML = Object.entries(PROVIDERS).map(([id, p]) => {
     const isSet = settings.providers?.[id]?.apiKeyIsSet;
@@ -504,9 +856,7 @@ async function openSettings() {
       .addEventListener("click", () => selectSettingsProvider(id));
   });
 
-  // Select the first provider by default
   selectSettingsProvider(Object.keys(PROVIDERS)[0], settings);
-
   document.getElementById("modal-overlay").classList.add("open");
 }
 
@@ -515,7 +865,6 @@ function selectSettingsProvider(providerId, settingsArg) {
     JSON.parse(document.getElementById("settings-dialog").dataset.settings || "{}");
   activeSettingsProvider = providerId;
 
-  // Update chip active state
   document.querySelectorAll(".provider-chip").forEach(chip => {
     chip.classList.toggle("active", chip.id === `chip-${providerId}`);
   });
@@ -523,10 +872,8 @@ function selectSettingsProvider(providerId, settingsArg) {
   const provider   = PROVIDERS[providerId] || {};
   const provConfig = settings.providers?.[providerId] || {};
 
-  // API key field
   const keyInput = document.getElementById("s-api-key");
   if (provConfig.apiKeyIsSet) {
-    // Show masked bullets so user can see a key is stored; typing replaces it
     keyInput.value       = provConfig.apiKey || "••••••••";
     keyInput.placeholder = "";
   } else {
@@ -538,11 +885,9 @@ function selectSettingsProvider(providerId, settingsArg) {
   document.getElementById("s-key-hint").textContent = provConfig.apiKeyIsSet
     ? `Stored: ${provConfig.apiKeyHint}` : "";
 
-  // Base URL field
   const urlInput = document.getElementById("s-base-url");
   urlInput.value = provConfig.baseUrl || provider.baseUrl || "";
 
-  // Provider-specific note
   const notes = {
     ollama:   "Ollama runs locally and does not require an API key. Make sure Ollama is running on your machine.",
     anthropic:"Uses Anthropic's OpenAI-compatible endpoint. Requires a Claude API key.",
@@ -563,11 +908,11 @@ function toggleKeyVis() {
 }
 
 async function saveSettings() {
-  const defaultProvider  = document.getElementById("s-default-provider").value;
-  const minimizeToTray   = document.getElementById("s-minimize-to-tray").checked;
-  const runAtStartup     = document.getElementById("s-run-at-startup").checked;
+  const defaultProvider      = document.getElementById("s-default-provider").value;
+  const minimizeToTray       = document.getElementById("s-minimize-to-tray").checked;
+  const runAtStartup         = document.getElementById("s-run-at-startup").checked;
+  const notificationsEnabled = document.getElementById("s-notifications").checked;
 
-  // Collect current provider edits
   const apiKey = document.getElementById("s-api-key").value.trim();
   const baseUrl = document.getElementById("s-base-url").value.trim();
 
@@ -578,7 +923,9 @@ async function saveSettings() {
     if (baseUrl) providers[activeSettingsProvider].baseUrl = baseUrl;
   }
 
-  const res = await window.agentAPI.saveSettings({ defaultProvider, minimizeToTray, runAtStartup, providers });
+  const res = await window.agentAPI.saveSettings({
+    defaultProvider, minimizeToTray, runAtStartup, notificationsEnabled, providers,
+  });
   if (res.success) {
     closeSettings();
     populateFormProviders(defaultProvider);
@@ -629,10 +976,13 @@ document.getElementById("agent-list").addEventListener("click", e => {
   const btn = e.target.closest("[data-action]");
   if (!btn) return;
   const { action, id, target } = btn.dataset;
-  if (action === "edit")   editAgent(id);
-  if (action === "run")    runNow(id);
-  if (action === "delete") deleteAgent(id);
-  if (action === "output") toggleOutput(target);
+  if (action === "edit")        editAgent(id);
+  if (action === "run")         runNow(id);
+  if (action === "delete")      deleteAgent(id);
+  if (action === "output")      toggleOutput(target);
+  if (action === "copy-output") copyOutput(id);
+  if (action === "open-html")   openOutputAsHtml(id);
+  if (action === "history")     showHistory(id);
 });
 
 document.getElementById("agent-list").addEventListener("change", e => {
@@ -657,7 +1007,6 @@ document.getElementById("btn-open-data-dir").addEventListener("click", () => win
 
 document.getElementById("btn-export-agents").addEventListener("click", async () => {
   if (!selectionMode) {
-    // ── Enter selection mode ─────────────────────────────────────────────────
     if (!agents.length) { toast("No agents to export.", "info"); return; }
     selectionMode = true;
     selectedIds   = new Set();
@@ -668,7 +1017,6 @@ document.getElementById("btn-export-agents").addEventListener("click", async () 
     renderAgentList();
     toast("Check the agents you want to export, then click Export Selected.", "info");
   } else {
-    // ── Execute export with selected ids ─────────────────────────────────────
     if (!selectedIds.size) { toast("Select at least one agent to export.", "info"); return; }
     const res = await window.agentAPI.exportAgents([...selectedIds]);
     if (res.canceled) { exitSelectionMode(); return; }
@@ -704,11 +1052,13 @@ document.getElementById("btn-import-agents").addEventListener("click", async () 
 
   agents = await window.agentAPI.listAgents();
   renderAgentList();
+  populateChainToDropdown();
 
   let msg = `Imported ${res.imported} agent${res.imported !== 1 ? "s" : ""}.`;
   if (res.skipped.length) msg += ` Skipped ${res.skipped.length} duplicate${res.skipped.length !== 1 ? "s" : ""} (${res.skipped.join(", ")}).`;
   toast(msg, res.imported ? "success" : "info");
 });
+
 document.getElementById("f-provider").addEventListener("change", onProviderChange);
 document.getElementById("f-schedule-pick").addEventListener("change", onScheduleChange);
 document.getElementById("f-temp").addEventListener("input", () => {
@@ -717,7 +1067,11 @@ document.getElementById("f-temp").addEventListener("input", () => {
 
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
 document.addEventListener("keydown", e => {
-  if (e.key === "Escape") closeSettings();
+  if (e.key === "Escape") {
+    closeSettings();
+    document.getElementById("history-overlay").classList.remove("open");
+    document.getElementById("packs-overlay").classList.remove("open");
+  }
 });
 
 // ── Background refresh ────────────────────────────────────────────────────────

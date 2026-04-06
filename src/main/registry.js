@@ -68,6 +68,8 @@ function createAgent(payload) {
     scriptPath: payload.scriptPath || "",
     args:       Array.isArray(payload.args) ? payload.args : [],
     timeoutMs:  payload.timeoutMs  || 30_000,
+    // Chaining — list of agent IDs to trigger after this agent completes
+    chainTo:    Array.isArray(payload.chainTo) ? payload.chainTo : [],
     // Runtime state (managed by worker)
     lastRun:    null,
     lastStatus: "idle",
@@ -97,10 +99,20 @@ function updateAgent(id, updates) {
 function deleteAgent(id) {
   const registry = loadRegistry();
   saveRegistry(registry.filter(a => a.id !== id));
+  try {
+    const { deleteHistory } = require("./history");
+    deleteHistory(id);
+  } catch {}
 }
 
 /** Quick status/result update used by the worker after each run. */
 function recordRun(id, status, result) {
+  // Append to per-agent history file (imported lazily to avoid circular dep at init)
+  try {
+    const { appendHistory } = require("./history");
+    appendHistory(id, status, result);
+  } catch {}
+
   updateAgent(id, {
     lastRun:    new Date().toISOString(),
     lastStatus: status,
