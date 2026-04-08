@@ -1,0 +1,26 @@
+{
+  "exportedBy": "AI Agent Platform",
+  "version": "1.1.0",
+  "exportedAt": "2026-04-08T16:32:48.035Z",
+  "agents": [
+    {
+      "id": "a158a627-97d5-471f-8469-28903a37939f",
+      "name": "TrafficAlert",
+      "description": "Checks local traffic conditions",
+      "type": "prompt",
+      "enabled": true,
+      "schedule": "15 7 * * *",
+      "provider": "xai",
+      "model": "grok-3",
+      "temperature": 0.7,
+      "systemPrompt": "You are a traffic assistant. Report current traffic, delays, and best routes.",
+      "userPrompt": "What is the current traffic situation around Middletown, Ohio?",
+      "command": "",
+      "scriptPath": "",
+      "args": [],
+      "timeoutMs": 30000,
+      "chainTo": [],
+      "createdAt": "2026-04-08T16:28:11.596Z"
+    }
+  ]
+}

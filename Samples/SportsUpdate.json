@@ -1,0 +1,26 @@
+{
+  "exportedBy": "AI Agent Platform",
+  "version": "1.1.0",
+  "exportedAt": "2026-04-08T16:33:05.668Z",
+  "agents": [
+    {
+      "id": "0ff84c33-dd27-4483-8d43-df9677ffecde",
+      "name": "SportsUpdate",
+      "description": "Gives sports scores and highlights",
+      "type": "prompt",
+      "enabled": true,
+      "schedule": "15 9 * * *",
+      "provider": "xai",
+      "model": "grok-3",
+      "temperature": 0.7,
+      "systemPrompt": "You are a sports reporter. Summarize latest scores, standings, and key highlights.",
+      "userPrompt": "What were the major sports scores and results from the last 24 hours?",
+      "command": "",
+      "scriptPath": "",
+      "args": [],
+      "timeoutMs": 30000,
+      "chainTo": [],
+      "createdAt": "2026-04-08T16:29:37.861Z"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "exportedBy": "AI Agent Platform",
+  "version": "1.1.0",
+  "exportedAt": "2026-04-08T16:32:13.791Z",
+  "agents": [
+    {
+      "id": "a76858b0-26b9-4657-b07d-e0fe7a5887e2",
+      "name": "Motivator",
+      "description": "Sends daily motivation and mindset boosts",
+      "type": "prompt",
+      "enabled": true,
+      "schedule": "0 9 * * *",
+      "provider": "xai",
+      "model": "grok-3",
+      "temperature": 0.7,
+      "systemPrompt": "You are an encouraging life coach. Give uplifting, actionable motivation without being cheesy.",
+      "userPrompt": "Give me a powerful motivational message for today.",
+      "command": "",
+      "scriptPath": "",
+      "args": [],
+      "timeoutMs": 30000,
+      "chainTo": [],
+      "createdAt": "2026-04-08T16:22:06.508Z"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "exportedBy": "AI Agent Platform",
+  "version": "1.1.0",
+  "exportedAt": "2026-04-08T16:32:39.761Z",
+  "agents": [
+    {
+      "id": "120b606a-5f94-4c1f-86f6-feb5c41e8e64",
+      "name": "GasTracker",
+      "description": "Monitors prices for gas in your area",
+      "type": "prompt",
+      "enabled": true,
+      "schedule": "0 13 * * *",
+      "provider": "xai",
+      "model": "grok-3",
+      "temperature": 0.7,
+      "systemPrompt": "You are a bargain hunter. Check current prices and alert on drops for specified items.",
+      "userPrompt": "What are the current best prices for gas in Middletown, Ohio?",
+      "command": "",
+      "scriptPath": "",
+      "args": [],
+      "timeoutMs": 30000,
+      "chainTo": [],
+      "createdAt": "2026-04-08T16:26:08.947Z"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "exportedBy": "AI Agent Platform",
+  "version": "1.1.0",
+  "exportedAt": "2026-04-08T16:32:32.106Z",
+  "agents": [
+    {
+      "id": "73eb9144-04f0-4e6e-9497-73a6801375ee",
+      "name": "RecipeIdea",
+      "description": "Gives quick meal or recipe ideas",
+      "type": "prompt",
+      "enabled": true,
+      "schedule": "59 12 * * *",
+      "provider": "xai",
+      "model": "grok-3",
+      "temperature": 0.7,
+      "systemPrompt": "You are a creative home cook. Suggest simple, tasty recipes with easy-to-find ingredients.",
+      "userPrompt": "Suggest 3 quick dinner ideas for tonight using common pantry items.",
+      "command": "",
+      "scriptPath": "",
+      "args": [],
+      "timeoutMs": 30000,
+      "chainTo": [],
+      "createdAt": "2026-04-08T16:24:52.280Z"
+    }
+  ]
+}
