@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld("agentAPI", {
 
   // ── Run history ───────────────────────────────────────────────────────────
   getAgentHistory: (id)      => ipcRenderer.invoke("agents:getHistory", { id }),
+  getAnalytics:    ()        => ipcRenderer.invoke("agents:getAnalytics"),
 
   // ── Settings ──────────────────────────────────────────────────────────────
   getSettings:  ()     => ipcRenderer.invoke("settings:get"),
@@ -52,6 +53,10 @@ contextBridge.exposeInMainWorld("agentAPI", {
   // ── Agent Packs ───────────────────────────────────────────────────────────
   fetchAgentPacks: (url)  => ipcRenderer.invoke("packs:fetch",  { url }),
   importAgentPack: (pack) => ipcRenderer.invoke("packs:import", { pack }),
+
+  // ── Agent Store ───────────────────────────────────────────────────────────
+  fetchStore:    ()      => ipcRenderer.invoke("store:fetch"),
+  getStoreAgent: (url)   => ipcRenderer.invoke("store:getAgent", { url }),
 
   // ── Push events (main → renderer) ────────────────────────────────────────
   onStatusChanged:  (cb) => ipcRenderer.on("agent:statusChanged", (_e, d) => cb(d)),

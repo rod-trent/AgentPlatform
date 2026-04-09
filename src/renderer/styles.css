@@ -726,10 +726,12 @@ body {
 
 #settings-dialog {
   width: 440px;
+  max-height: min(680px, calc(100vh - 48px));
   background: var(--mica-layer-2);
   border: 1px solid var(--stroke-strong);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-16);
+  display: flex; flex-direction: column;
   overflow: hidden;
   animation: dialog-in var(--dur-medium) var(--ease-decelerate);
 }
@@ -1158,6 +1160,13 @@ body {
   animation: dialog-in var(--dur-medium) var(--ease-decelerate);
 }
 
+/* Settings dialog body scrolls when content exceeds max-height */
+#settings-dialog .dialog-body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
 /* Allow the body to shrink and the packs-list inside it to scroll */
 #packs-dialog .dialog-body {
   flex: 1;
@@ -1215,4 +1224,156 @@ body {
   gap: 10px;
   font-size: 11px;
   color: var(--text-tertiary);
+}
+
+/* ── Store badge ─────────────────────────────────────────────────────────────── */
+.store-badge {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  background: #e81123;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  border-radius: 8px;
+  text-align: center;
+  pointer-events: none;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+#btn-open-store { position: relative; }
+
+/* ── Variable hint ───────────────────────────────────────────────────────────── */
+.var-hint {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 5px;
+  line-height: 1.6;
+}
+.var-hint code {
+  background: rgba(255,255,255,0.07);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
+  font-size: 10.5px;
+  color: var(--accent);
+}
+
+/* ── Analytics dialog ───────────────────────────────────────────────────────── */
+#analytics-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(16px) saturate(1.2);
+  display: none;
+  place-items: center;
+  z-index: 250;
+}
+#analytics-overlay.open { display: grid; }
+
+#analytics-dialog {
+  width: min(780px, calc(100vw - 48px));
+  max-height: 80vh;
+  background: var(--mica-layer-2);
+  border: 1px solid var(--stroke-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-16);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  animation: dialog-in var(--dur-medium) var(--ease-decelerate);
+}
+#analytics-dialog .dialog-body { overflow-y: auto; }
+
+.analytics-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.analytics-table th {
+  text-align: left;
+  padding: 7px 10px;
+  color: var(--text-tertiary);
+  font-weight: 600;
+  border-bottom: 1px solid var(--stroke);
+  white-space: nowrap;
+}
+.analytics-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.analytics-table tr:last-child td { border-bottom: none; }
+.analytics-table tr:hover td { background: var(--fill-subtle); }
+.analytics-name { font-weight: 600; color: var(--text-primary) !important; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+.sr-good { color: #6ccb6c !important; font-weight: 600; }
+.sr-mid  { color: #f0c040 !important; font-weight: 600; }
+.sr-bad  { color: #fc7572 !important; font-weight: 600; }
+
+/* ── Agent Store dialog ──────────────────────────────────────────────────────── */
+#store-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(16px) saturate(1.2);
+  display: none;
+  place-items: center;
+  z-index: 250;
+}
+#store-overlay.open { display: grid; }
+
+#store-dialog {
+  width: min(700px, calc(100vw - 48px));
+  max-height: 80vh;
+  background: var(--mica-layer-2);
+  border: 1px solid var(--stroke-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-16);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  animation: dialog-in var(--dur-medium) var(--ease-decelerate);
+}
+#store-dialog .dialog-body { overflow-y: auto; }
+
+.store-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.store-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--fill-subtle);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  transition: background var(--dur-short), border-color var(--dur-short);
+}
+.store-card:hover {
+  background: var(--fill-secondary);
+  border-color: var(--stroke-strong);
+}
+.store-card-info { flex: 1; min-width: 0; }
+.store-card-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+.store-card-meta {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-bottom: 3px;
+}
+.store-card-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.store-add-btn {
+  flex-shrink: 0;
+  align-self: center;
 }

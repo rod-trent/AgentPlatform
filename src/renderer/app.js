@@ -51,6 +51,9 @@ let selectedIds     = new Set(); // agent ids checked for export
     renderAgentList();
     populateChainToDropdown();
   });
+
+  // Background store check — badge the Store button if new agents are available
+  _refreshStoreBadge();
 })();
 
 // ── Provider helpers ──────────────────────────────────────────────────────────
@@ -98,7 +101,7 @@ function getSelectedModel() {
   return modelSel.value;
 }
 
-// ── Chain-to dropdown ─────────────────────────────────────────────────────────
+// ── Chain-to dropdown & condition ────────────────────────────────────────────
 
 function populateChainToDropdown(excludeId) {
   const sel = document.getElementById("f-chain-to");
@@ -110,7 +113,23 @@ function populateChainToDropdown(excludeId) {
       .map(a => `<option value="${a.id}">${esc(a.name)}</option>`)
       .join("");
   if (current && sel.querySelector(`option[value="${current}"]`)) sel.value = current;
+  updateChainConditionVisibility();
 }
+
+function updateChainConditionVisibility() {
+  const chainVal   = document.getElementById("f-chain-to").value;
+  const condWrap   = document.getElementById("chain-condition-wrap");
+  const condSel    = document.getElementById("f-chain-condition");
+  const kwInput    = document.getElementById("f-chain-keyword");
+  if (!condWrap) return;
+  condWrap.style.display = chainVal ? "" : "none";
+  if (condSel && kwInput) {
+    kwInput.style.display = condSel.value === "contains" ? "" : "none";
+  }
+}
+
+document.getElementById("f-chain-to").addEventListener("change", updateChainConditionVisibility);
+document.getElementById("f-chain-condition").addEventListener("change", updateChainConditionVisibility);
 
 // ── Worker pill ───────────────────────────────────────────────────────────────
 function updateWorkerPill(running, count) {
@@ -404,10 +423,23 @@ function editAgent(id) {
   document.getElementById("f-name").value = a.name;
   document.getElementById("f-desc").value = a.description || "";
 
-  // Chain-to
+  // Chain-to + condition
   populateChainToDropdown(id);
   const chainSel = document.getElementById("f-chain-to");
   chainSel.value = (a.chainTo && a.chainTo[0]) ? a.chainTo[0] : "";
+  const rawCond = a.chainCondition || "success";
+  const condSel = document.getElementById("f-chain-condition");
+  const kwInput = document.getElementById("f-chain-keyword");
+  if (condSel) {
+    if (rawCond.startsWith("contains:")) {
+      condSel.value = "contains";
+      if (kwInput) kwInput.value = rawCond.slice("contains:".length).trim();
+    } else {
+      condSel.value = rawCond;
+      if (kwInput) kwInput.value = "";
+    }
+  }
+  updateChainConditionVisibility();
 
   // Schedule
   const sched = document.getElementById("f-schedule-pick");
@@ -511,12 +543,21 @@ function collectFormPayload() {
   const schedule = getSchedule();
   const chainVal = document.getElementById("f-chain-to").value;
 
+  const condSel  = document.getElementById("f-chain-condition");
+  const kwInput  = document.getElementById("f-chain-keyword");
+  let chainCondition = condSel?.value || "success";
+  if (chainCondition === "contains") {
+    const kw = kwInput?.value.trim() || "";
+    chainCondition = kw ? `contains:${kw}` : "success";
+  }
+
   const payload = {
     name,
     description: document.getElementById("f-desc").value.trim(),
     type: formType,
     schedule,
-    chainTo: chainVal ? [chainVal] : [],
+    chainTo:        chainVal ? [chainVal] : [],
+    chainCondition: chainVal ? chainCondition : "success",
   };
 
   if (formType === "prompt") {
@@ -791,6 +832,193 @@ function closePacksBrowser() {
   document.getElementById("packs-overlay").classList.remove("open");
 }
 
+// ── Analytics dialog ──────────────────────────────────────────────────────────
+document.getElementById("btn-open-analytics").addEventListener("click", openAnalytics);
+document.getElementById("btn-close-analytics").addEventListener("click", closeAnalytics);
+document.getElementById("btn-close-analytics-footer").addEventListener("click", closeAnalytics);
+document.getElementById("analytics-overlay").addEventListener("click", e => {
+  if (e.target === e.currentTarget) closeAnalytics();
+});
+
+async function openAnalytics() {
+  document.getElementById("analytics-overlay").classList.add("open");
+  document.getElementById("analytics-loading").style.display = "";
+  document.getElementById("analytics-empty").style.display   = "none";
+  document.getElementById("analytics-table-wrap").style.display = "none";
+
+  const data = await window.agentAPI.getAnalytics();
+  document.getElementById("analytics-loading").style.display = "none";
+
+  const rows = Object.values(data).filter(r => r.total > 0);
+  if (!rows.length) {
+    document.getElementById("analytics-empty").style.display = "";
+    return;
+  }
+
+  document.getElementById("analytics-tbody").innerHTML = rows
+    .sort((a, b) => b.total - a.total)
+    .map(r => {
+      const srClass = r.successRate === null ? "" : r.successRate >= 80 ? "sr-good" : r.successRate >= 50 ? "sr-mid" : "sr-bad";
+      const srText  = r.successRate === null ? "—" : `${r.successRate}%`;
+      const dur     = r.avgDuration ? (r.avgDuration < 1000 ? `${r.avgDuration}ms` : `${(r.avgDuration/1000).toFixed(1)}s`) : "—";
+      const lastRun = r.lastRun ? timeAgo(r.lastRun) : "Never";
+      const statusClass = r.lastStatus === "success" ? "success" : r.lastStatus === "error" ? "error" : "";
+      return `<tr>
+        <td class="analytics-name">${esc(r.name)}</td>
+        <td><span class="fluent-badge ${r.type === "script" ? "badge-script" : "badge-prompt"}">${r.type}</span></td>
+        <td>${r.total}</td>
+        <td class="${srClass}">${srText}</td>
+        <td class="${r.failures > 0 ? "sr-bad" : ""}">${r.failures}</td>
+        <td>${dur}</td>
+        <td class="${statusClass}">${lastRun}</td>
+      </tr>`;
+    }).join("");
+
+  document.getElementById("analytics-table-wrap").style.display = "";
+}
+
+function closeAnalytics() {
+  document.getElementById("analytics-overlay").classList.remove("open");
+}
+
+// ── Agent Store dialog ────────────────────────────────────────────────────────
+document.getElementById("btn-open-store").addEventListener("click", openStore);
+document.getElementById("btn-close-store").addEventListener("click", closeStore);
+document.getElementById("btn-close-store-footer").addEventListener("click", closeStore);
+document.getElementById("store-overlay").addEventListener("click", e => {
+  if (e.target === e.currentTarget) closeStore();
+});
+
+async function openStore() {
+  document.getElementById("store-overlay").classList.add("open");
+  document.getElementById("store-loading").style.display  = "";
+  document.getElementById("store-list").innerHTML = "";
+  document.getElementById("store-error").style.display    = "none";
+  _setStoreBadge(0); // clear badge once user opens the store
+
+  const res = await window.agentAPI.fetchStore();
+  document.getElementById("store-loading").style.display = "none";
+
+  if (!res.success) {
+    const errEl = document.getElementById("store-error");
+    errEl.textContent = `Could not load store: ${res.error}`;
+    errEl.style.display = "";
+    return;
+  }
+
+  if (!res.files.length) {
+    document.getElementById("store-list").innerHTML =
+      `<div class="history-empty">No agents found in the store.</div>`;
+    return;
+  }
+
+  // Render placeholder cards while we have file metadata (name, download_url)
+  const existingNames = new Set(agents.map(a => a.name.toLowerCase()));
+
+  document.getElementById("store-list").innerHTML = res.files.map((f, i) => {
+    // Derive a display name from filename (strip .json, replace dashes/underscores)
+    const displayName = f.name.replace(/\.json$/i, "").replace(/[-_]/g, " ");
+    return `
+    <div class="store-card" id="store-card-${i}">
+      <div class="store-card-info">
+        <div class="store-card-name" id="store-name-${i}">${esc(displayName)}</div>
+        <div class="store-card-meta" id="store-meta-${i}" style="color:var(--text-tertiary);font-size:12px">Loading…</div>
+        <div class="store-card-desc" id="store-desc-${i}"></div>
+      </div>
+      <button class="fluent-btn accent store-add-btn" id="store-btn-${i}"
+              data-store-idx="${i}" data-url="${esc(f.download_url)}">Add</button>
+    </div>`;
+  }).join("");
+
+  // Async-load each agent's metadata to fill in details
+  res.files.forEach(async (f, i) => {
+    try {
+      const detail = await window.agentAPI.getStoreAgent(f.download_url);
+      if (!detail.success || !detail.agents.length) return;
+      const ag = detail.agents[0];
+      const nameEl = document.getElementById(`store-name-${i}`);
+      const metaEl = document.getElementById(`store-meta-${i}`);
+      const descEl = document.getElementById(`store-desc-${i}`);
+      const btn    = document.getElementById(`store-btn-${i}`);
+      if (nameEl) nameEl.textContent = ag.name || nameEl.textContent;
+      if (metaEl) metaEl.textContent = [ag.provider, ag.model, ag.schedule].filter(Boolean).join("  ·  ");
+      if (descEl) descEl.textContent = ag.description || "";
+      if (btn) {
+        const alreadyInstalled = existingNames.has((ag.name || "").toLowerCase());
+        if (alreadyInstalled) {
+          btn.textContent = "✓ Installed";
+          btn.disabled = true;
+        }
+        btn.dataset.agentName = ag.name || "";
+      }
+    } catch {}
+  });
+
+  document.getElementById("store-list").addEventListener("click", async e => {
+    const btn = e.target.closest(".store-add-btn");
+    if (!btn || btn.disabled) return;
+    const url = btn.dataset.url;
+    btn.textContent = "Installing…";
+    btn.disabled = true;
+
+    const detail = await window.agentAPI.getStoreAgent(url);
+    if (!detail.success) {
+      btn.textContent = "✕ Failed";
+      toast(detail.error || "Could not load agent.", "error");
+      return;
+    }
+
+    const res2 = await window.agentAPI.importAgentPack({ agents: detail.agents });
+    if (res2.success && res2.imported > 0) {
+      btn.textContent = "✓ Installed";
+      existingNames.add((btn.dataset.agentName || "").toLowerCase());
+      agents = await window.agentAPI.listAgents();
+      renderAgentList();
+      populateChainToDropdown();
+      _refreshStoreBadge();
+      toast(`"${btn.dataset.agentName || "Agent"}" added to your platform!`, "success");
+    } else if (res2.skipped?.length) {
+      btn.textContent = "✓ Installed";
+      btn.disabled = true;
+      toast(`Already installed.`, "info");
+    } else {
+      btn.textContent = "✕ Failed";
+      btn.disabled = false;
+      toast(res2.error || "Import failed.", "error");
+    }
+  });
+}
+
+function closeStore() {
+  document.getElementById("store-overlay").classList.remove("open");
+}
+
+// ── Store badge ───────────────────────────────────────────────────────────────
+async function _refreshStoreBadge() {
+  try {
+    const res = await window.agentAPI.fetchStore();
+    if (!res.success || !res.files.length) return;
+    const installedNames = new Set(agents.map(a => a.name.toLowerCase()));
+    // Count files whose filename-derived name doesn't match any installed agent
+    const newCount = res.files.filter(f => {
+      const derived = f.name.replace(/\.json$/i, "").replace(/[-_]/g, " ").toLowerCase();
+      return !installedNames.has(derived);
+    }).length;
+    _setStoreBadge(newCount);
+  } catch { /* network unavailable — badge stays hidden */ }
+}
+
+function _setStoreBadge(count) {
+  const badge = document.getElementById("store-badge");
+  if (!badge) return;
+  if (count > 0) {
+    badge.textContent = count > 99 ? "99+" : String(count);
+    badge.style.display = "";
+  } else {
+    badge.style.display = "none";
+  }
+}
+
 // ── Reset form ────────────────────────────────────────────────────────────────
 function resetForm() {
   editingAgentId = null;
@@ -808,6 +1036,11 @@ function resetForm() {
   document.getElementById("f-temp").value = "0.7";
   document.getElementById("temp-val").textContent = "0.7";
   document.getElementById("f-chain-to").value = "";
+  const condSel = document.getElementById("f-chain-condition");
+  const kwInput = document.getElementById("f-chain-keyword");
+  if (condSel) condSel.value = "success";
+  if (kwInput) kwInput.value = "";
+  updateChainConditionVisibility();
   setFormType("prompt");
   onProviderChange();
   clearFormError();
@@ -841,6 +1074,13 @@ async function openSettings() {
   document.getElementById("s-minimize-to-tray").checked = settings.minimizeToTray !== false;
   document.getElementById("s-run-at-startup").checked   = !!settings.runAtStartup;
   document.getElementById("s-notifications").checked    = settings.notificationsEnabled !== false;
+
+  const webhookEnabled = !!settings.webhookEnabled;
+  const webhookPort    = settings.webhookPort || 7171;
+  document.getElementById("s-webhook-enabled").checked = webhookEnabled;
+  document.getElementById("s-webhook-port").value      = webhookPort;
+  document.getElementById("s-webhook-config").style.display = webhookEnabled ? "" : "none";
+  _updateWebhookUrlHint(webhookEnabled, webhookPort);
 
   document.getElementById("settings-dialog").dataset.settings = JSON.stringify(settings);
 
@@ -907,11 +1147,33 @@ function toggleKeyVis() {
   el.type = el.type === "password" ? "text" : "password";
 }
 
+function _updateWebhookUrlHint(enabled, port) {
+  const urlEl = document.getElementById("s-webhook-url");
+  if (!urlEl) return;
+  urlEl.textContent = enabled
+    ? `Trigger URL: http://127.0.0.1:${port}/trigger/{agentId}`
+    : "";
+}
+
+document.getElementById("s-webhook-enabled").addEventListener("change", () => {
+  const enabled = document.getElementById("s-webhook-enabled").checked;
+  const port    = parseInt(document.getElementById("s-webhook-port").value, 10) || 7171;
+  document.getElementById("s-webhook-config").style.display = enabled ? "" : "none";
+  _updateWebhookUrlHint(enabled, port);
+});
+document.getElementById("s-webhook-port").addEventListener("input", () => {
+  const enabled = document.getElementById("s-webhook-enabled").checked;
+  const port    = parseInt(document.getElementById("s-webhook-port").value, 10) || 7171;
+  _updateWebhookUrlHint(enabled, port);
+});
+
 async function saveSettings() {
   const defaultProvider      = document.getElementById("s-default-provider").value;
   const minimizeToTray       = document.getElementById("s-minimize-to-tray").checked;
   const runAtStartup         = document.getElementById("s-run-at-startup").checked;
   const notificationsEnabled = document.getElementById("s-notifications").checked;
+  const webhookEnabled       = document.getElementById("s-webhook-enabled").checked;
+  const webhookPort          = parseInt(document.getElementById("s-webhook-port").value, 10) || 7171;
 
   const apiKey = document.getElementById("s-api-key").value.trim();
   const baseUrl = document.getElementById("s-base-url").value.trim();
@@ -924,7 +1186,8 @@ async function saveSettings() {
   }
 
   const res = await window.agentAPI.saveSettings({
-    defaultProvider, minimizeToTray, runAtStartup, notificationsEnabled, providers,
+    defaultProvider, minimizeToTray, runAtStartup, notificationsEnabled,
+    webhookEnabled, webhookPort, providers,
   });
   if (res.success) {
     closeSettings();
@@ -1069,6 +1332,8 @@ document.getElementById("f-temp").addEventListener("input", () => {
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") {
     closeSettings();
+    closeAnalytics();
+    closeStore();
     document.getElementById("history-overlay").classList.remove("open");
     document.getElementById("packs-overlay").classList.remove("open");
   }

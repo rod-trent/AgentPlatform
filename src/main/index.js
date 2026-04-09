@@ -1,8 +1,18 @@
 "use strict";
 
+// Suppress the punycode deprecation warning emitted by transitive dependencies
+// (openai SDK → whatwg-url → punycode). Overriding emitWarning is the only
+// reliable way — process.on("warning") doesn't suppress the default output.
+const _origEmitWarning = process.emitWarning.bind(process);
+process.emitWarning = (warning, ...args) => {
+  const msg = typeof warning === "string" ? warning : (warning?.message || "");
+  if (msg.includes("punycode")) return;
+  _origEmitWarning(warning, ...args);
+};
+
 const {
   app, BrowserWindow, ipcMain, Tray, Menu,
-  nativeImage, shell, dialog,
+  nativeImage, shell, dialog, safeStorage,
 } = require("electron");
 const path = require("path");
 const fs   = require("fs");
@@ -12,6 +22,7 @@ const cron = require("node-cron");
 const registry   = require("./registry");
 const history    = require("./history");
 const worker     = require("./worker");
+const webhook    = require("./webhook");
 const llmClient  = require("./grokClient");
 const { PROVIDERS } = llmClient;
 
@@ -28,6 +39,30 @@ app.on("second-instance", () => {
 
 // ── Settings file ─────────────────────────────────────────────────────────────
 const SETTINGS_FILE = path.join(registry.DATA_DIR, "settings.json");
+
+// ── API key encryption (safeStorage — OS keychain-backed) ────────────────────
+const ENC_PREFIX = "enc:";
+
+function encryptApiKey(plain) {
+  if (!plain) return plain;
+  try {
+    if (safeStorage.isEncryptionAvailable()) {
+      return ENC_PREFIX + safeStorage.encryptString(plain).toString("base64");
+    }
+  } catch { /* fall through — store plaintext */ }
+  return plain;
+}
+
+function decryptApiKey(stored) {
+  if (!stored) return stored;
+  if (!stored.startsWith(ENC_PREFIX)) return stored; // already plaintext (migration)
+  try {
+    if (safeStorage.isEncryptionAvailable()) {
+      return safeStorage.decryptString(Buffer.from(stored.slice(ENC_PREFIX.length), "base64"));
+    }
+  } catch { /* corrupted — return empty */ }
+  return "";
+}
 
 function loadSettings() {
   try {
@@ -58,6 +93,11 @@ function buildEffectiveSettings() {
 
   const providers = stored.providers || {};
 
+  // Decrypt stored API keys (handles both enc: and legacy plaintext)
+  for (const [id, cfg] of Object.entries(providers)) {
+    if (cfg.apiKey) providers[id] = { ...cfg, apiKey: decryptApiKey(cfg.apiKey) };
+  }
+
   // Env-var fallbacks (never overwrite an explicitly stored key)
   const envDefaults = {
     xai:       process.env.GROK_API_KEY      || process.env.XAI_API_KEY || "",
@@ -75,6 +115,8 @@ function buildEffectiveSettings() {
     minimizeToTray:        stored.minimizeToTray        !== false, // default true
     notificationsEnabled:  stored.notificationsEnabled  !== false, // default true
     packsUrl:              stored.packsUrl              || "https://raw.githubusercontent.com/rod-trent/AgentPlatform/main/packs/index.json",
+    webhookEnabled:        stored.webhookEnabled        || false,
+    webhookPort:           stored.webhookPort           || 7171,
     providers,
   };
 }
@@ -232,7 +274,16 @@ function createWindow() {
   });
 
   mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
-  mainWindow.once("ready-to-show", () => mainWindow.show());
+  mainWindow.once("ready-to-show", () => {
+    // When launched at Windows startup, stay hidden in the tray (if minimizeToTray is on)
+    const wasLaunchedAtStartup = app.getLoginItemSettings().wasOpenedAtLogin;
+    const settings = buildEffectiveSettings();
+    if (wasLaunchedAtStartup && settings.minimizeToTray) {
+      // Window stays hidden; tray is available to open it
+      return;
+    }
+    mainWindow.show();
+  });
 
   // Close → hide to tray (if enabled) or quit
   mainWindow.on("close", (e) => {
@@ -277,6 +328,7 @@ function createTray() {
       click: () => {
         isQuitting = true;
         worker.stopAll();
+        webhook.stop();
         app.quit();
       },
     },
@@ -430,13 +482,23 @@ ${html}
 </html>`;
 }
 
-/** Fetch JSON from a URL using Node's built-in https/http. */
-function _fetchJson(url) {
+/** Fetch JSON from a URL using Node's built-in https/http. Follows one redirect. */
+function _fetchJson(url, _redirectCount = 0) {
   return new Promise((resolve, reject) => {
     const mod = url.startsWith("https") ? require("https") : require("http");
-    mod.get(url, { headers: { "User-Agent": "AI-Agent-Platform/1.0" } }, (res) => {
+    const headers = {
+      "User-Agent": "AI-Agent-Platform/1.0",
+      "Accept":     "application/vnd.github.v3+json, application/json, */*",
+    };
+    mod.get(url, { headers }, (res) => {
+      // Follow redirects (301/302/307/308), but only once
+      if ([301, 302, 307, 308].includes(res.statusCode) && res.headers.location && _redirectCount < 3) {
+        res.resume();
+        resolve(_fetchJson(res.headers.location, _redirectCount + 1));
+        return;
+      }
       if (res.statusCode !== 200) {
-        reject(new Error(`HTTP ${res.statusCode} fetching packs index`));
+        reject(new Error(`HTTP ${res.statusCode}`));
         res.resume(); return;
       }
       let body = "";
@@ -444,10 +506,22 @@ function _fetchJson(url) {
       res.on("data", chunk => { body += chunk; });
       res.on("end", () => {
         try { resolve(JSON.parse(body)); }
-        catch (e) { reject(new Error("Invalid JSON in packs index")); }
+        catch (e) { reject(new Error("Invalid JSON in response")); }
       });
     }).on("error", reject);
   });
+}
+
+// ── Webhook management ────────────────────────────────────────────────────────
+function _applyWebhookSettings(settings) {
+  if (settings.webhookEnabled) {
+    webhook.start(settings.webhookPort, (agentId) => {
+      worker.setSettings(buildEffectiveSettings());
+      worker.triggerAgent(agentId);
+    });
+  } else {
+    webhook.stop();
+  }
 }
 
 // ── IPC handlers ──────────────────────────────────────────────────────────────
@@ -535,6 +609,34 @@ function registerIpcHandlers() {
     return history.loadHistory(id);
   });
 
+  // Get aggregated analytics for all agents
+  ipcMain.handle("agents:getAnalytics", (e) => {
+    if (!guard(e)) return {};
+    const agents = registry.loadRegistry();
+    const result = {};
+    for (const agent of agents) {
+      const entries = history.loadHistory(agent.id);
+      const total      = entries.length;
+      const successes  = entries.filter(en => en.status === "success").length;
+      const durations  = entries.map(en => en.duration).filter(d => d > 0);
+      const avgDuration = durations.length
+        ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
+        : 0;
+      result[agent.id] = {
+        name:         agent.name,
+        type:         agent.type,
+        total,
+        successes,
+        failures:     total - successes,
+        successRate:  total ? Math.round((successes / total) * 100) : null,
+        avgDuration,
+        lastRun:      agent.lastRun,
+        lastStatus:   agent.lastStatus,
+      };
+    }
+    return result;
+  });
+
   // Open markdown text as a pretty HTML page in the default browser
   ipcMain.handle("shell:openMarkdownInBrowser", async (e, { markdown, title }) => {
     if (!guard(e)) return { success: false };
@@ -561,6 +663,38 @@ function registerIpcHandlers() {
       const data = await _fetchJson(packsUrl);
       const packs = Array.isArray(data) ? data : (data?.packs || []);
       return { success: true, packs };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  // Agent Store: list available agents from GitHub Samples
+  ipcMain.handle("store:fetch", async (e) => {
+    if (!guard(e)) return { success: false, error: "Unauthorized" };
+    try {
+      const data = await _fetchJson(
+        "https://api.github.com/repos/rod-trent/AgentPlatform/contents/Samples"
+      );
+      const files = Array.isArray(data)
+        ? data.filter(f => f.type === "file" && f.name.toLowerCase().endsWith(".json"))
+        : [];
+      return { success: true, files };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  // Agent Store: fetch a single agent file by its download_url
+  ipcMain.handle("store:getAgent", async (e, { url }) => {
+    if (!guard(e)) return { success: false, error: "Unauthorized" };
+    if (!url || !url.startsWith("https://")) return { success: false, error: "Invalid URL." };
+    try {
+      const data = await _fetchJson(url);
+      let agentList = [];
+      if (Array.isArray(data))    agentList = data;
+      else if (data?.agents)      agentList = data.agents;
+      else if (data?.name)        agentList = [data];
+      return { success: true, agents: agentList };
     } catch (err) {
       return { success: false, error: err.message };
     }
@@ -617,6 +751,8 @@ function registerIpcHandlers() {
       notificationsEnabled: s.notificationsEnabled,
       packsUrl:             s.packsUrl,
       runAtStartup,
+      webhookEnabled:       s.webhookEnabled,
+      webhookPort:          s.webhookPort,
       providers: maskedProviders,
     };
   });
@@ -637,13 +773,16 @@ function registerIpcHandlers() {
       // Apply immediately to the Windows Run registry key
       app.setLoginItemSettings({ openAtLogin: data.runAtStartup });
     }
+    if (typeof data.webhookEnabled === "boolean") current.webhookEnabled = data.webhookEnabled;
+    if (typeof data.webhookPort === "number" && data.webhookPort > 0) current.webhookPort = data.webhookPort;
     if (data.providers) {
       current.providers = current.providers || {};
       for (const [id, cfg] of Object.entries(data.providers)) {
         if (!current.providers[id]) current.providers[id] = {};
         // Only overwrite the key if the user actually typed a new one (not a masked placeholder)
         if (cfg.apiKey && !cfg.apiKey.startsWith("••")) {
-          current.providers[id].apiKey = cfg.apiKey;
+          // Encrypt before storing
+          current.providers[id].apiKey = encryptApiKey(cfg.apiKey);
         }
         if (cfg.baseUrl !== undefined) current.providers[id].baseUrl = cfg.baseUrl;
       }
@@ -652,6 +791,8 @@ function registerIpcHandlers() {
     // Push updated settings into the worker/client immediately
     const effective = buildEffectiveSettings();
     worker.setSettings(effective);
+    // Apply webhook changes
+    _applyWebhookSettings(effective);
     return { success: true };
   });
 
@@ -700,10 +841,11 @@ function registerIpcHandlers() {
     // Strip volatile runtime state — export only the definition fields
     const exportable = agents.map(({ id, name, description, type, enabled, schedule,
       provider, model, temperature, systemPrompt, userPrompt,
-      command, scriptPath, args, timeoutMs, chainTo, createdAt }) => ({
+      command, scriptPath, args, timeoutMs, chainTo, chainCondition, createdAt }) => ({
       id, name, description, type, enabled, schedule,
       provider, model, temperature, systemPrompt, userPrompt,
-      command, scriptPath, args, timeoutMs, chainTo: chainTo || [], createdAt,
+      command, scriptPath, args, timeoutMs,
+      chainTo: chainTo || [], chainCondition: chainCondition || "success", createdAt,
     }));
 
     const payload = {
@@ -809,7 +951,9 @@ function createAppMenu() {
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 app.whenReady().then(() => {
   // Seed provider settings into worker/client at startup
-  worker.setSettings(buildEffectiveSettings());
+  const effectiveSettings = buildEffectiveSettings();
+  worker.setSettings(effectiveSettings);
+  _applyWebhookSettings(effectiveSettings);
 
   createAppMenu();
   registerIpcHandlers();

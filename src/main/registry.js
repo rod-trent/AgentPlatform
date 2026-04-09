@@ -69,7 +69,8 @@ function createAgent(payload) {
     args:       Array.isArray(payload.args) ? payload.args : [],
     timeoutMs:  payload.timeoutMs  || 30_000,
     // Chaining — list of agent IDs to trigger after this agent completes
-    chainTo:    Array.isArray(payload.chainTo) ? payload.chainTo : [],
+    chainTo:        Array.isArray(payload.chainTo) ? payload.chainTo : [],
+    chainCondition: payload.chainCondition || "success",
     // Runtime state (managed by worker)
     lastRun:    null,
     lastStatus: "idle",
@@ -106,11 +107,11 @@ function deleteAgent(id) {
 }
 
 /** Quick status/result update used by the worker after each run. */
-function recordRun(id, status, result) {
+function recordRun(id, status, result, duration) {
   // Append to per-agent history file (imported lazily to avoid circular dep at init)
   try {
     const { appendHistory } = require("./history");
-    appendHistory(id, status, result);
+    appendHistory(id, status, result, duration);
   } catch {}
 
   updateAgent(id, {

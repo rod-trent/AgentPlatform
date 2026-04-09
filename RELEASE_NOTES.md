@@ -2,6 +2,73 @@
 
 ---
 
+## v1.2.0 — April 9, 2026
+
+### New Features
+
+#### Agent Store
+A **🛒 Store** button in the Active Agents header opens a live gallery of ready-to-install agents pulled directly from the project's GitHub `Samples/` directory. Each card shows the agent's name, provider, model, and description. Click **Add** to install any individual agent in one step — with duplicate detection. A red badge on the Store button signals how many agents are available that you haven't installed yet.
+
+#### Run Analytics Dashboard
+A **📊 Analytics** button opens a table showing aggregated run statistics for every agent: total runs, success rate (colour-coded green/yellow/red), failure count, average duration, and time of last run. Powered by the run history data already collected per agent.
+
+#### Variable Substitution in Prompts
+Prompt agents now support dynamic template variables in both system and user prompts:
+
+| Variable | Resolves to |
+|---|---|
+| `{{date}}` | Today's date (localised) |
+| `{{time}}` | Current time (localised) |
+| `{{datetime}}` | Full date and time |
+| `{{dayOfWeek}}` | e.g. Monday, Tuesday… |
+| `{{year}}` / `{{month}}` / `{{day}}` | Numeric date parts |
+| `{{lastResult}}` | The agent's most recent output |
+| `{{env:VAR_NAME}}` | Any environment variable |
+
+A hint row below the User Prompt field shows the available variables at a glance.
+
+#### Conditional Agent Chaining
+The **Chain To** feature now supports four trigger conditions selectable from a dropdown:
+
+- **On success** — chains only when the upstream agent completes successfully (previous default, unchanged)
+- **Always** — chains regardless of outcome
+- **On error only** — chains when the upstream agent fails (useful for error-handling agents)
+- **If output contains…** — chains only when the output includes a specified keyword
+
+#### Webhook Trigger Server
+Agents can now be triggered by external tools over a local HTTP endpoint. Enable the webhook server in **Settings** and configure the port (default: 7171). Once running, any script, CI pipeline, or other app can trigger an agent with:
+
+```
+POST http://127.0.0.1:7171/trigger/{agentId}
+```
+
+The server binds exclusively to `127.0.0.1` — it is never exposed to the network. The live trigger URL is shown in the Settings dialog as you configure it.
+
+#### Encrypted API Key Storage
+API keys are now encrypted before being written to `settings.json` using Electron's `safeStorage` API, which is backed by the Windows Credential Manager. Keys saved in previous versions are migrated transparently on the next save. No change to the Settings UI is required.
+
+#### Start Minimized to System Tray
+When **Run at Windows Startup** is enabled and **Minimize to System Tray** is on, the app now launches directly to the tray without showing the window. The scheduler starts immediately and the tray icon is available to open the window at any time.
+
+#### Powered-by Footer on Agent Output
+Every successful agent run now appends a branded footer to its output:
+
+> *AgentName* is Powered by the **AI Agent Platform**
+
+The footer renders with Markdown formatting in the HTML browser view and reads cleanly as plain text in the card and clipboard copy.
+
+### Under the Hood
+
+- `worker.js` — added `resolveVariables()` for template substitution; added `_chainShouldFire()` for conditional chaining logic; `recordRun` now receives and stores run `duration`
+- `history.js` — history entries now include a `duration` field (milliseconds), used by the analytics dashboard
+- `registry.js` — `chainCondition` added to agent schema; `recordRun` signature updated to accept duration
+- `webhook.js` — new module; local HTTP trigger server bound to loopback only
+- `index.js` — `safeStorage` encryption for API keys; `wasOpenedAtLogin` startup-minimize logic; IPC handlers added: `agents:getAnalytics`, `store:fetch`, `store:getAgent`; `_fetchJson` updated to follow redirects and send GitHub API `Accept` header; `process.emitWarning` patched to suppress the transitive `punycode` deprecation warning
+- `preload.js` — exposed `getAnalytics`, `fetchStore`, `getStoreAgent`
+- Export format updated to include `chainCondition`
+
+---
+
 ## v1.1.0 — April 6, 2026
 
 ### New Features

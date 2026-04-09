@@ -29,13 +29,14 @@ function loadHistory(agentId) {
 }
 
 /** Append a new run result to an agent's history file (newest first, capped at MAX_ENTRIES). */
-function appendHistory(agentId, status, result) {
+function appendHistory(agentId, status, result, duration) {
   ensureHistoryDir();
   const entries = loadHistory(agentId);
   entries.unshift({
     timestamp: new Date().toISOString(),
     status,
     result: result ? String(result).slice(0, 50_000) : null,
+    duration: duration || 0,
   });
   // Keep only the most recent MAX_ENTRIES
   if (entries.length > MAX_ENTRIES) entries.length = MAX_ENTRIES;

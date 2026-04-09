@@ -6,7 +6,7 @@ Built with [Electron](https://electronjs.org) and styled to the Windows 11 Fluen
 
 ---
 
-![AI Agent Platform v1.1.0](https://github.com/rod-trent/AgentPlatform/blob/main/Images/v1.1.0-Main.png)
+![AI Agent Platform v1.2.0](https://github.com/rod-trent/AgentPlatform/blob/main/Images/v1.2.0-Main.png)
 
 ---
 
@@ -24,6 +24,17 @@ Built with [Electron](https://electronjs.org) and styled to the Windows 11 Fluen
 - **Windows 11 Fluent UI** — Mica material, Acrylic blur, Fluent motion, Segoe UI Variable
 - **No cloud dependency** — all data stays on your machine in `Documents\AIAgentPlatform\`
 - **OneDrive sync** — because data lives in `Documents\`, any cloud sync tool (OneDrive, Dropbox, etc.) automatically roams your agents, settings, and provider keys across every machine you install the app on
+
+### New in v1.2.0
+
+- **Agent Store** — the **🛒 Store** button opens a live gallery of agents from the GitHub repository. Install any individual agent in one click. A red badge shows how many new agents are available
+- **Run Analytics** — the **📊 Analytics** button shows a table of run stats per agent: total runs, success rate, failures, average duration, and last run time
+- **Variable substitution** — use `{{date}}`, `{{time}}`, `{{dayOfWeek}}`, `{{lastResult}}`, `{{env:VAR_NAME}}` and more directly in system and user prompts
+- **Conditional chaining** — choose when a chained agent fires: on success, always, on error only, or when output contains a keyword
+- **Webhook trigger server** — expose a local HTTP endpoint (`POST http://127.0.0.1:7171/trigger/{agentId}`) to trigger agents from scripts, CI pipelines, or any other tool
+- **Encrypted API key storage** — keys are now encrypted at rest using the Windows Credential Manager via Electron's `safeStorage` API
+- **Start minimized to tray** — when both "Run at Startup" and "Minimize to Tray" are enabled, the app launches silently to the system tray with the scheduler running
+- **Powered-by footer** — every successful agent output includes a branded *AgentName* is Powered by the **AI Agent Platform** footer
 
 ### New in v1.1.0
 
@@ -70,7 +81,7 @@ npm install
 npm run build
 ```
 
-The installer is written to `dist\AI Agent Platform Setup 1.1.0.exe`.
+The installer is written to `dist\AI Agent Platform Setup 1.2.0.exe`.
 
 ---
 
@@ -82,8 +93,9 @@ Open the **Settings** dialog (⚙ button, top-right) to:
 2. **Configure API keys** for each provider you want to use
 3. **Toggle "Minimize to System Tray"** — when enabled, closing the window keeps agents running in the background
 4. **Toggle "Windows Notifications"** — enable or disable native Windows toast notifications on agent completion or failure
+5. **Toggle "Webhook Trigger Server"** — expose a local HTTP endpoint to trigger agents from external tools; configure the port (default: 7171)
 
-API keys are stored locally in `Documents\AIAgentPlatform\settings.json` and are never transmitted anywhere except directly to the chosen provider's API endpoint.
+API keys are encrypted at rest using the Windows Credential Manager and are never transmitted anywhere except directly to the chosen provider's API endpoint.
 
 ---
 
@@ -117,11 +129,24 @@ Runs any existing script or executable on a schedule using `execFile` (no shell 
 
 ## Agent Chaining
 
-Agents can be chained together so that the output of one becomes the input of the next. Set the **Chain To** dropdown when creating or editing a prompt agent. After a successful run, the result is automatically injected as the `userPrompt` of the downstream agent and triggers it immediately.
+Agents can be chained together so that the output of one becomes the input of the next. Set the **Chain To** dropdown when creating or editing a prompt agent, then choose a **Chain Condition**:
+
+| Condition | Behaviour |
+|---|---|
+| On success | Chains only when the upstream agent completes successfully (default) |
+| Always | Chains regardless of outcome |
+| On error only | Chains when the upstream agent fails |
+| If output contains… | Chains only when the output includes a specified keyword |
+
+After the condition is met, the upstream result is automatically injected as the `userPrompt` of the downstream agent and triggers it immediately.
 
 **Example:** a *News Summarizer* agent feeds its output into a *Tweet Drafter* agent, which turns the summary into ready-to-post social copy — all on a schedule, hands-free.
 
 ---
+
+## Agent Store
+
+Click **🛒 Store** in the Active Agents header to browse individual agents available from the project repository. Each card shows the agent's name, provider, model, and description. Click **Add** to install any agent in one step. A red badge on the button indicates how many agents are available that you haven't yet installed.
 
 ## Community Agent Packs
 
@@ -184,15 +209,18 @@ src/
     index.js          ← Electron main process, IPC handlers, tray
     preload.js        ← contextBridge API surface (window.agentAPI)
     registry.js       ← Agent CRUD, persisted to Documents/
-    worker.js         ← cron scheduler, script runner, notifications, chaining
+    worker.js         ← cron scheduler, variable substitution, chaining, notifications
     grokClient.js     ← Multi-provider LLM client (OpenAI SDK)
     history.js        ← Per-agent run history persistence
+    webhook.js        ← Local HTTP trigger server (loopback only)
   renderer/
     index.html        ← App shell
     styles.css        ← Windows 11 Fluent Design System
     app.js            ← UI logic
 packs/
   index.json          ← Community agent packs index
+Samples/
+  *.json              ← Individual sample agents (also available via the Agent Store)
 ```
 
 ---

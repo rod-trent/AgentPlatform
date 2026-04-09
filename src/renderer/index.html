@@ -87,6 +87,7 @@
           </div>
           <textarea class="fluent-textarea" id="f-user" rows="3"
                     placeholder="What should the agent ask?"></textarea>
+          <div class="var-hint">Variables: <code>{{date}}</code> <code>{{time}}</code> <code>{{dayOfWeek}}</code> <code>{{lastResult}}</code> <code>{{env:NAME}}</code></div>
         </div>
         <div class="fluent-input-wrap">
           <label class="fluent-label" for="f-provider">Provider</label>
@@ -144,6 +145,18 @@
           <option value="">— None —</option>
           <!-- Populated by app.js with existing agents -->
         </select>
+      </div>
+      <div class="fluent-input-wrap" id="chain-condition-wrap" style="display:none">
+        <label class="fluent-label">Chain Condition</label>
+        <select class="fluent-select" id="f-chain-condition">
+          <option value="success">On success</option>
+          <option value="always">Always (success or error)</option>
+          <option value="error">On error only</option>
+          <option value="contains">If output contains…</option>
+        </select>
+        <input class="fluent-input" id="f-chain-keyword" type="text"
+               placeholder="keyword to match in output" autocomplete="off"
+               style="display:none;margin-top:6px" />
       </div>
 
       <div class="separator"></div>
@@ -273,6 +286,8 @@
       <div class="list-header">
         <span class="list-title">Active Agents</span>
         <span id="agent-count">0 agents</span>
+        <button class="fluent-btn" id="btn-open-store"   title="Browse agents from the Agent Store">🛒 Store<span id="store-badge" class="store-badge" style="display:none"></span></button>
+        <button class="fluent-btn" id="btn-open-analytics" title="View run analytics">📊 Analytics</button>
         <button class="fluent-btn" id="btn-browse-packs" title="Browse community agent packs">🌐 Packs</button>
         <button class="fluent-btn" id="btn-import-agents" title="Import agents from a JSON file">⬆ Import</button>
         <button class="fluent-btn" id="btn-cancel-selection" style="display:none" title="Cancel export selection">✕ Cancel</button>
@@ -381,6 +396,27 @@
         </label>
       </div>
 
+      <!-- Webhook toggle -->
+      <div class="setting-row">
+        <div class="setting-row-text">
+          <div class="setting-row-label">Webhook Trigger Server</div>
+          <div class="setting-row-sub">Expose a local HTTP endpoint to trigger agents from scripts or other apps</div>
+        </div>
+        <label class="f-toggle">
+          <input type="checkbox" id="s-webhook-enabled" />
+          <div class="f-track"></div>
+          <div class="f-thumb"></div>
+        </label>
+      </div>
+      <div id="s-webhook-config" style="display:none;margin-bottom:8px">
+        <div class="fluent-input-wrap" style="margin-bottom:0">
+          <label class="fluent-label" for="s-webhook-port">Port</label>
+          <input class="fluent-input" id="s-webhook-port" type="number"
+                 value="7171" min="1024" max="65535" style="width:120px" />
+        </div>
+        <div class="dialog-info" id="s-webhook-url" style="margin-top:6px;font-family:monospace;font-size:11px"></div>
+      </div>
+
       <div class="separator"></div>
 
       <!-- Per-provider config -->
@@ -440,6 +476,62 @@
     <div class="dialog-footer">
       <button class="fluent-btn" id="btn-confirm-cancel">Cancel</button>
       <button class="fluent-btn" id="btn-confirm-ok" style="background:rgba(252,61,57,0.15);border-color:rgba(252,61,57,0.4);color:#fc7572">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Analytics dialog ───────────────────────────────────────────────────── -->
+<div id="analytics-overlay">
+  <div id="analytics-dialog">
+    <div class="dialog-title-bar">
+      <div class="dialog-icon">📊</div>
+      <div class="dialog-title">Run Analytics</div>
+      <button class="fluent-btn icon-only" id="btn-close-analytics" style="margin-left:auto">✕</button>
+    </div>
+    <div class="dialog-body" style="padding-bottom:8px">
+      <div id="analytics-loading" class="packs-loading">Loading analytics…</div>
+      <div id="analytics-empty"  style="display:none;color:var(--text-secondary);font-size:13px;padding:16px 0">No run history yet. Start the scheduler and run some agents first.</div>
+      <div id="analytics-table-wrap" style="display:none;overflow-x:auto">
+        <table id="analytics-table" class="analytics-table">
+          <thead>
+            <tr>
+              <th>Agent</th>
+              <th>Type</th>
+              <th>Runs</th>
+              <th>Success %</th>
+              <th>Failures</th>
+              <th>Avg Duration</th>
+              <th>Last Run</th>
+            </tr>
+          </thead>
+          <tbody id="analytics-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button class="fluent-btn" id="btn-close-analytics-footer">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Agent Store dialog ──────────────────────────────────────────────────── -->
+<div id="store-overlay">
+  <div id="store-dialog">
+    <div class="dialog-title-bar">
+      <div class="dialog-icon">🛒</div>
+      <div class="dialog-title">Agent Store</div>
+      <button class="fluent-btn icon-only" id="btn-close-store" style="margin-left:auto">✕</button>
+    </div>
+    <div class="dialog-body" style="padding-bottom:8px">
+      <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">
+        Ready-to-use agents from the community. Click <strong>Add</strong> to install an individual agent.
+      </p>
+      <div id="store-loading" class="packs-loading">Loading store…</div>
+      <div id="store-error"  class="callout-error" style="display:none"></div>
+      <div id="store-list"   class="store-list"></div>
+    </div>
+    <div class="dialog-footer">
+      <button class="fluent-btn" id="btn-close-store-footer">Close</button>
     </div>
   </div>
 </div>

@@ -33,6 +33,44 @@ function _log(msg) {
   console.log(`[worker ${ts}] ${msg}`);
 }
 
+/**
+ * Resolve template variables in a prompt string.
+ * Supported: {{date}}, {{time}}, {{datetime}}, {{dayOfWeek}},
+ *            {{year}}, {{month}}, {{day}}, {{lastResult}},
+ *            {{env:VAR_NAME}}
+ */
+function resolveVariables(text, context) {
+  if (!text) return text;
+  const now  = new Date();
+  const days = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  return text
+    .replace(/\{\{date\}\}/gi,       now.toLocaleDateString())
+    .replace(/\{\{time\}\}/gi,       now.toLocaleTimeString())
+    .replace(/\{\{datetime\}\}/gi,   now.toLocaleString())
+    .replace(/\{\{dayOfWeek\}\}/gi,  days[now.getDay()])
+    .replace(/\{\{year\}\}/gi,       String(now.getFullYear()))
+    .replace(/\{\{month\}\}/gi,      String(now.getMonth() + 1).padStart(2, "0"))
+    .replace(/\{\{day\}\}/gi,        String(now.getDate()).padStart(2, "0"))
+    .replace(/\{\{lastResult\}\}/gi, context?.lastResult || "")
+    .replace(/\{\{env:([^}]+)\}\}/gi, (_, name) => process.env[name.trim()] || "");
+}
+
+/**
+ * Determine whether a chain should fire based on chainCondition.
+ * Condition values: "success" (default), "always", "error", "contains:<keyword>"
+ */
+function _chainShouldFire(agent, status, result) {
+  const cond = (agent.chainCondition || "success").trim();
+  if (cond === "always")  return true;
+  if (cond === "success") return status === "success";
+  if (cond === "error")   return status === "error";
+  if (cond.startsWith("contains:")) {
+    const keyword = cond.slice("contains:".length).trim().toLowerCase();
+    return keyword.length > 0 && typeof result === "string" && result.toLowerCase().includes(keyword);
+  }
+  return status === "success";
+}
+
 /** Send a native Windows toast notification (if the system supports it). */
 function _notify(title, body, type) {
   if (!_settings?.notificationsEnabled) return;
@@ -94,10 +132,16 @@ async function _executeAgent(agentId, chainedInput = null) {
 
   try {
     if (agent.type === "prompt") {
-      // If chained, inject the upstream output as the user prompt
-      const effectiveAgent = chainedInput
-        ? { ...agent, userPrompt: String(chainedInput) }
-        : agent;
+      // Build effective agent: chained input overrides userPrompt, then resolve variables
+      const context = { lastResult: chainedInput || agent.lastResult || "" };
+      const effectiveAgent = {
+        ...agent,
+        systemPrompt: resolveVariables(agent.systemPrompt, context),
+        userPrompt:   resolveVariables(
+          chainedInput != null ? String(chainedInput) : agent.userPrompt,
+          context
+        ),
+      };
       result = await runPromptAgent(effectiveAgent, _settings);
     } else if (agent.type === "script") {
       result = await _runScriptAgent(agent);
@@ -108,8 +152,13 @@ async function _executeAgent(agentId, chainedInput = null) {
     _log(`[${agent.name}] error: ${result}`);
   }
 
+  // Append powered-by footer to successful outputs
+  if (status === "success" && result) {
+    result = `${result}\n\n---\n✦ *${agent.name}* is Powered by the **AI Agent Platform**`;
+  }
+
   const duration = Date.now() - started;
-  recordRun(agentId, status, result);
+  recordRun(agentId, status, result, duration);
   _push("agent:runComplete", { id: agentId, status, result, duration, timestamp: new Date().toISOString() });
   _log(`[${agent.name}] ${status} in ${duration}ms`);
 
@@ -123,10 +172,10 @@ async function _executeAgent(agentId, chainedInput = null) {
   runningAgents.delete(agentId);
 
   // ── Agent chaining ─────────────────────────────────────────────────────────
-  // Fire chained agents with this result as their input (only on success)
-  if (status === "success" && Array.isArray(agent.chainTo) && agent.chainTo.length) {
+  // Fire chained agents based on chainCondition (default: success only)
+  if (Array.isArray(agent.chainTo) && agent.chainTo.length && _chainShouldFire(agent, status, result)) {
     for (const chainId of agent.chainTo) {
-      _log(`[${agent.name}] chaining to ${chainId}`);
+      _log(`[${agent.name}] chaining to ${chainId} (condition: ${agent.chainCondition || "success"})`);
       // Small delay so the UI can update before the next run starts
       setTimeout(() => _executeAgent(chainId, result), 300);
     }
