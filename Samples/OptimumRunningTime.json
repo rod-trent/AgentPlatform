@@ -1,0 +1,27 @@
+{
+  "exportedBy": "AI Agent Platform",
+  "version": "1.2.0",
+  "exportedAt": "2026-04-10T14:40:04.287Z",
+  "agents": [
+    {
+      "id": "e1fe0bac-2c79-4c02-a4ed-5e254f0bcee9",
+      "name": "Optimum Running Time",
+      "description": "Checks the weather and",
+      "type": "prompt",
+      "enabled": true,
+      "schedule": "0 9 * * *",
+      "provider": "openai",
+      "model": "gpt-4o",
+      "temperature": 0.7,
+      "systemPrompt": "You are a helpful running coach enabling me to build running stamina.",
+      "userPrompt": "Check the weather in my area for today and give me the best times of the day to get in a run outside. Or, if a good time can't be found for outside, suggest a treadmill run instead.",
+      "command": "",
+      "scriptPath": "",
+      "args": [],
+      "timeoutMs": 30000,
+      "chainTo": [],
+      "chainCondition": "success",
+      "createdAt": "2026-04-10T14:36:45.549Z"
+    }
+  ]
+}
