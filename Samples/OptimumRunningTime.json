@@ -1,12 +1,12 @@
 {
   "exportedBy": "AI Agent Platform",
   "version": "1.2.0",
-  "exportedAt": "2026-04-10T14:40:04.287Z",
+  "exportedAt": "2026-04-10T14:41:47.511Z",
   "agents": [
     {
       "id": "e1fe0bac-2c79-4c02-a4ed-5e254f0bcee9",
       "name": "Optimum Running Time",
-      "description": "Checks the weather and",
+      "description": "Checks the weather and provides the best times of the day to get in a run.",
       "type": "prompt",
       "enabled": true,
       "schedule": "0 9 * * *",
