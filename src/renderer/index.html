@@ -87,7 +87,7 @@
           </div>
           <textarea class="fluent-textarea" id="f-user" rows="3"
                     placeholder="What should the agent ask?"></textarea>
-          <div class="var-hint">Variables: <code>{{date}}</code> <code>{{time}}</code> <code>{{dayOfWeek}}</code> <code>{{lastResult}}</code> <code>{{env:NAME}}</code></div>
+          <div class="var-hint">Variables: <code>{{date}}</code> <code>{{time}}</code> <code>{{dayOfWeek}}</code> <code>{{lastResult}}</code> <code>{{location}}</code> <code>{{city}}</code> <code>{{country}}</code> <code>{{env:NAME}}</code></div>
         </div>
         <div class="fluent-input-wrap">
           <label class="fluent-label" for="f-provider">Provider</label>
@@ -134,6 +134,49 @@
           <label class="fluent-label" for="f-timeout">Timeout (seconds)</label>
           <input class="fluent-input" id="f-timeout" type="number" value="30" min="1" max="3600" />
         </div>
+      </div>
+
+      <div class="separator"></div>
+
+      <!-- ── Group ── -->
+      <div class="fluent-input-wrap">
+        <label class="fluent-label" for="f-group">Group <span style="opacity:.5">(optional — tag this agent into a named group)</span></label>
+        <input class="fluent-input" id="f-group" type="text" list="f-group-list"
+               placeholder="e.g. Morning Reports" autocomplete="off" />
+        <datalist id="f-group-list"><!-- Populated by app.js --></datalist>
+      </div>
+
+      <div class="separator"></div>
+
+      <!-- ── MCP Server ── -->
+      <div class="fluent-input-wrap">
+        <label class="fluent-label" for="f-mcp-url">MCP Server URL <span style="opacity:.5">(optional)</span></label>
+        <input class="fluent-input" id="f-mcp-url" type="text"
+               placeholder="http://localhost:3000" autocomplete="off" spellcheck="false" />
+        <span style="font-size:11px;color:var(--text-tertiary);margin-top:3px;display:block">
+          Agent will query this MCP server for available tools and include them as context.
+        </span>
+      </div>
+
+      <!-- ── Outbound Webhook ── -->
+      <div class="setting-row" style="margin:0 0 4px">
+        <div class="setting-row-text">
+          <div class="setting-row-label" style="font-size:12px">Call webhook on completion</div>
+        </div>
+        <label class="f-toggle">
+          <input type="checkbox" id="f-webhook-enabled" />
+          <div class="f-track"></div>
+          <div class="f-thumb"></div>
+        </label>
+      </div>
+      <div id="f-webhook-url-wrap" style="display:none">
+        <div class="fluent-input-wrap" style="margin-bottom:0">
+          <input class="fluent-input" id="f-webhook-url" type="text"
+                 placeholder="https://hooks.slack.com/…" autocomplete="off" spellcheck="false" />
+        </div>
+        <span style="font-size:11px;color:var(--text-tertiary);margin-top:3px;display:block">
+          POSTs JSON {agentId, name, status, result, timestamp} to this URL on every run.
+        </span>
       </div>
 
       <div class="separator"></div>
@@ -289,6 +332,8 @@
         <button class="fluent-btn" id="btn-open-store"   title="Browse agents from the Agent Store">🛒 Store<span id="store-badge" class="store-badge" style="display:none"></span></button>
         <button class="fluent-btn" id="btn-open-analytics" title="View run analytics">📊 Analytics</button>
         <button class="fluent-btn" id="btn-browse-packs" title="Browse community agent packs">🌐 Packs</button>
+        <button class="fluent-btn" id="btn-run-all"  title="Trigger all enabled agents immediately">▶▶ Run All</button>
+        <button class="fluent-btn" id="btn-view-chain" title="Visualize agent chain graph">⛓ Chains</button>
         <button class="fluent-btn" id="btn-import-agents" title="Import agents from a JSON file">⬆ Import</button>
         <button class="fluent-btn" id="btn-cancel-selection" style="display:none" title="Cancel export selection">✕ Cancel</button>
         <button class="fluent-btn accent" id="btn-export-agents" title="Export agents to a JSON file">⬇ Export</button>
@@ -532,6 +577,49 @@
     </div>
     <div class="dialog-footer">
       <button class="fluent-btn" id="btn-close-store-footer">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Chain Graph dialog ─────────────────────────────────────────────────── -->
+<div id="chain-overlay">
+  <div id="chain-dialog">
+    <div class="dialog-title-bar">
+      <div class="dialog-icon">⛓</div>
+      <div class="dialog-title">Agent Chain Graph</div>
+      <button class="fluent-btn icon-only" id="btn-close-chain" style="margin-left:auto">✕</button>
+    </div>
+    <div class="dialog-body" style="padding-bottom:8px">
+      <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">
+        Shows how agents chain into each other. <span style="color:#fc7572">Red agents</span> are part of a circular dependency.
+      </p>
+      <div id="chain-content" class="chain-graph-wrap"></div>
+    </div>
+    <div class="dialog-footer">
+      <div id="chain-cycle-warning" class="callout-error" style="display:none;flex:1;margin-right:12px"></div>
+      <button class="fluent-btn" id="btn-close-chain-footer">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Output Diff dialog ──────────────────────────────────────────────────── -->
+<div id="diff-overlay">
+  <div id="diff-dialog">
+    <div class="dialog-title-bar">
+      <div class="dialog-icon">🔍</div>
+      <div class="dialog-title" id="diff-title">Output Diff</div>
+      <button class="fluent-btn icon-only" id="btn-close-diff" style="margin-left:auto">✕</button>
+    </div>
+    <div class="dialog-body" style="padding-bottom:8px">
+      <div class="diff-legend">
+        <span class="diff-added-sample">+ Added</span>
+        <span class="diff-removed-sample">− Removed</span>
+        <span class="diff-unchanged-sample">  Unchanged</span>
+      </div>
+      <div id="diff-content" class="diff-wrap"></div>
+    </div>
+    <div class="dialog-footer">
+      <button class="fluent-btn" id="btn-close-diff-footer">Close</button>
     </div>
   </div>
 </div>

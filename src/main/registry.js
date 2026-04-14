@@ -71,6 +71,13 @@ function createAgent(payload) {
     // Chaining — list of agent IDs to trigger after this agent completes
     chainTo:        Array.isArray(payload.chainTo) ? payload.chainTo : [],
     chainCondition: payload.chainCondition || "success",
+    // Grouping
+    group: payload.group || "",
+    // MCP server integration (optional URL to an MCP-compatible server)
+    mcpUrl: payload.mcpUrl || "",
+    // Outbound webhook called on completion
+    onCompleteWebhookEnabled: payload.onCompleteWebhookEnabled || false,
+    onCompleteWebhookUrl:     payload.onCompleteWebhookUrl     || "",
     // Runtime state (managed by worker)
     lastRun:    null,
     lastStatus: "idle",

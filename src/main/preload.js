@@ -11,12 +11,15 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("agentAPI", {
 
   // ── Registry ──────────────────────────────────────────────────────────────
-  listAgents:   ()           => ipcRenderer.invoke("agents:list"),
-  createAgent:  (data)       => ipcRenderer.invoke("agents:create",  data),
-  updateAgent:  (data)       => ipcRenderer.invoke("agents:update",  data),
-  deleteAgent:  (id)         => ipcRenderer.invoke("agents:delete",  { id }),
-  toggleAgent:  (id, enabled)=> ipcRenderer.invoke("agents:toggle",  { id, enabled }),
-  runNow:       (id)         => ipcRenderer.invoke("agents:runNow",  { id }),
+  listAgents:       ()               => ipcRenderer.invoke("agents:list"),
+  createAgent:      (data)           => ipcRenderer.invoke("agents:create",       data),
+  updateAgent:      (data)           => ipcRenderer.invoke("agents:update",       data),
+  deleteAgent:      (id)             => ipcRenderer.invoke("agents:delete",       { id }),
+  toggleAgent:      (id, enabled)    => ipcRenderer.invoke("agents:toggle",       { id, enabled }),
+  runNow:           (id)             => ipcRenderer.invoke("agents:runNow",       { id }),
+  runAll:           ()               => ipcRenderer.invoke("agents:runAll"),
+  runGroup:         (group)          => ipcRenderer.invoke("agents:runGroup",     { group }),
+  setGroupEnabled:  (group, enabled) => ipcRenderer.invoke("agents:setGroupEnabled", { group, enabled }),
 
   // ── Test (run without saving) ─────────────────────────────────────────────
   testAgent:    (config)     => ipcRenderer.invoke("agents:test", config),
@@ -36,7 +39,8 @@ contextBridge.exposeInMainWorld("agentAPI", {
   getWorkerStatus: ()        => ipcRenderer.invoke("worker:status"),
 
   // ── App info ──────────────────────────────────────────────────────────────
-  getVersion:   () => ipcRenderer.invoke("app:getVersion"),
+  getVersion:     () => ipcRenderer.invoke("app:getVersion"),
+  getGeoLocation: () => ipcRenderer.invoke("app:getGeoLocation"),
 
   // ── Import / Export ───────────────────────────────────────────────────────
   exportAgents: (ids) => ipcRenderer.invoke("agents:export", { ids }),
@@ -55,8 +59,10 @@ contextBridge.exposeInMainWorld("agentAPI", {
   importAgentPack: (pack) => ipcRenderer.invoke("packs:import", { pack }),
 
   // ── Agent Store ───────────────────────────────────────────────────────────
-  fetchStore:    ()      => ipcRenderer.invoke("store:fetch"),
-  getStoreAgent: (url)   => ipcRenderer.invoke("store:getAgent", { url }),
+  fetchStore:       ()            => ipcRenderer.invoke("store:fetch"),
+  getStoreAgent:    (url)         => ipcRenderer.invoke("store:getAgent",       { url }),
+  getSeenStoreFiles: ()           => ipcRenderer.invoke("store:getSeenFiles"),
+  markStoreFilesSeen: (fileNames) => ipcRenderer.invoke("store:markFilesSeen",  { fileNames }),
 
   // ── Push events (main → renderer) ────────────────────────────────────────
   onStatusChanged:  (cb) => ipcRenderer.on("agent:statusChanged", (_e, d) => cb(d)),

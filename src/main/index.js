@@ -247,6 +247,32 @@ function createTrayIcon() {
   return getAppIcon(32);
 }
 
+// ── Geo-location cache (IP-based, fetched once at startup) ───────────────────
+let _geoCache = null;
+
+async function _fetchGeoLocation() {
+  try {
+    const data = await _fetchJson("https://ipapi.co/json/");
+    _geoCache = {
+      city:      data.city       || "",
+      region:    data.region     || "",
+      country:   data.country_name || "",
+      latitude:  data.latitude   || 0,
+      longitude: data.longitude  || 0,
+      timezone:  data.timezone   || Intl.DateTimeFormat().resolvedOptions().timeZone,
+      ip:        data.ip         || "",
+    };
+  } catch {
+    // Silently fall back — geo unavailable
+    _geoCache = {
+      city: "", region: "", country: "", latitude: 0, longitude: 0,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, ip: "",
+    };
+  }
+  worker.setGeo(_geoCache);
+  return _geoCache;
+}
+
 // ── App state ─────────────────────────────────────────────────────────────────
 let mainWindow   = null;
 let tray         = null;
@@ -275,11 +301,13 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
   mainWindow.once("ready-to-show", () => {
-    // When launched at Windows startup, stay hidden in the tray (if minimizeToTray is on)
-    const wasLaunchedAtStartup = app.getLoginItemSettings().wasOpenedAtLogin;
+    // When launched at Windows startup, stay hidden in the tray (if minimizeToTray is on).
+    // We pass --hidden via setLoginItemSettings args (more reliable than wasOpenedAtLogin on Win).
+    const launchedHidden = process.argv.includes("--hidden") ||
+                           app.getLoginItemSettings().wasOpenedAtLogin;
     const settings = buildEffectiveSettings();
-    if (wasLaunchedAtStartup && settings.minimizeToTray) {
-      // Window stays hidden; tray is available to open it
+    if (launchedHidden && settings.minimizeToTray) {
+      // Window stays hidden; tray icon is available to open it
       return;
     }
     mainWindow.show();
@@ -310,36 +338,72 @@ function createTray() {
     buttons: ["OK"],
   });
 
-  const buildMenu = () => Menu.buildFromTemplate([
-    {
-      label: "Open AI Agent Platform",
-      click: () => { mainWindow?.show(); mainWindow?.focus(); },
-    },
-    { type: "separator" },
-    {
-      label: workerActive ? "Stop Scheduler" : "Start Scheduler",
-      click: () => workerActive ? _stopWorker() : _startWorker(),
-    },
-    { type: "separator" },
-    { label: "About", click: showAbout },
-    { type: "separator" },
-    {
-      label: "Quit",
+  const buildMenu = () => {
+    // Build "Run Agent" submenu from currently enabled agents
+    const agents = registry.loadRegistry();
+    const enabledAgents = agents.filter(a => a.enabled);
+
+    // Group submenu items
+    const groupNames = [...new Set(enabledAgents.map(a => a.group).filter(Boolean))];
+    const groupItems = groupNames.map(g => ({
+      label: `▶ Group: ${g}`,
       click: () => {
-        isQuitting = true;
-        worker.stopAll();
-        webhook.stop();
-        app.quit();
+        worker.setSettings(buildEffectiveSettings());
+        const grouped = agents.filter(a => a.enabled && a.group === g);
+        for (const a of grouped) worker.triggerAgent(a.id);
       },
-    },
-  ]);
+    }));
+
+    const agentSubmenu = enabledAgents.length
+      ? [
+          ...enabledAgents.map(a => ({
+            label: a.name + (a.group ? ` [${a.group}]` : ""),
+            click: () => {
+              worker.setSettings(buildEffectiveSettings());
+              worker.triggerAgent(a.id);
+            },
+          })),
+          ...(groupItems.length ? [{ type: "separator" }, ...groupItems] : []),
+        ]
+      : [{ label: "(no enabled agents)", enabled: false }];
+
+    return Menu.buildFromTemplate([
+      {
+        label: "Open AI Agent Platform",
+        click: () => { mainWindow?.show(); mainWindow?.focus(); },
+      },
+      { type: "separator" },
+      {
+        label: workerActive ? "Stop Scheduler" : "Start Scheduler",
+        click: () => workerActive ? _stopWorker() : _startWorker(),
+      },
+      {
+        label: "Run Agent",
+        submenu: agentSubmenu,
+      },
+      { type: "separator" },
+      { label: "About", click: showAbout },
+      { type: "separator" },
+      {
+        label: "Quit",
+        click: () => {
+          isQuitting = true;
+          worker.stopAll();
+          webhook.stop();
+          app.quit();
+        },
+      },
+    ]);
+  };
 
   tray.setContextMenu(buildMenu());
   tray.setToolTip("AI Agent Platform");
   tray.on("click", () => { mainWindow?.show(); mainWindow?.focus(); });
 
-  // Rebuild menu when worker state changes so Start/Stop label stays correct
-  app.on("worker-state-changed", () => tray.setContextMenu(buildMenu()));
+  // Rebuild menu when worker state or agent list changes
+  const rebuildTrayMenu = () => tray.setContextMenu(buildMenu());
+  app.on("worker-state-changed", rebuildTrayMenu);
+  app.on("agents-changed",       rebuildTrayMenu);
 }
 
 // ── Worker start/stop ─────────────────────────────────────────────────────────
@@ -550,6 +614,7 @@ function registerIpcHandlers() {
     const agent = registry.createAgent(data);
     if (workerActive) worker.rebuildSchedule();
     mainWindow?.webContents.send("agents:updated", registry.loadRegistry());
+    app.emit("agents-changed");
     return { success: true, agent };
   });
 
@@ -563,6 +628,7 @@ function registerIpcHandlers() {
     if (!agent) return { success: false, error: "Agent not found." };
     if (workerActive) worker.rebuildSchedule();
     mainWindow?.webContents.send("agents:updated", registry.loadRegistry());
+    app.emit("agents-changed");
     return { success: true, agent };
   });
 
@@ -572,6 +638,7 @@ function registerIpcHandlers() {
     if (workerActive) worker.rebuildSchedule();
     mainWindow?.webContents.send("agents:updated", registry.loadRegistry());
     mainWindow?.webContents.send("worker:status", { running: workerActive, scheduledCount: worker.scheduledCount() });
+    app.emit("agents-changed");
     return { success: true };
   });
 
@@ -582,6 +649,7 @@ function registerIpcHandlers() {
     if (workerActive) worker.rebuildSchedule();
     mainWindow?.webContents.send("agents:updated", registry.loadRegistry());
     mainWindow?.webContents.send("worker:status", { running: workerActive, scheduledCount: worker.scheduledCount() });
+    app.emit("agents-changed");
     return { success: true, agent };
   });
 
@@ -590,6 +658,40 @@ function registerIpcHandlers() {
     if (!hasAnyApiKey()) return { success: false, error: "No API key configured. Open Settings." };
     worker.setSettings(buildEffectiveSettings());
     worker.triggerAgent(id);
+    return { success: true };
+  });
+
+  // Trigger all enabled agents immediately
+  ipcMain.handle("agents:runAll", (e) => {
+    if (!guard(e)) return { success: false, error: "Unauthorized" };
+    if (!hasAnyApiKey()) return { success: false, error: "No API key configured. Open Settings." };
+    worker.setSettings(buildEffectiveSettings());
+    const all = registry.loadRegistry().filter(a => a.enabled);
+    for (const a of all) worker.triggerAgent(a.id);
+    return { success: true, count: all.length };
+  });
+
+  // Trigger all enabled agents that belong to a named group
+  ipcMain.handle("agents:runGroup", (e, { group }) => {
+    if (!guard(e)) return { success: false, error: "Unauthorized" };
+    if (!hasAnyApiKey()) return { success: false, error: "No API key configured. Open Settings." };
+    worker.setSettings(buildEffectiveSettings());
+    const grouped = registry.loadRegistry().filter(a => a.enabled && a.group === group);
+    for (const a of grouped) worker.triggerAgent(a.id);
+    return { success: true, count: grouped.length };
+  });
+
+  // Enable or disable all agents in a group
+  ipcMain.handle("agents:setGroupEnabled", (e, { group, enabled }) => {
+    if (!guard(e)) return { success: false, error: "Unauthorized" };
+    const all = registry.loadRegistry();
+    for (const a of all) {
+      if (a.group === group) registry.updateAgent(a.id, { enabled });
+    }
+    if (workerActive) worker.rebuildSchedule();
+    mainWindow?.webContents.send("agents:updated", registry.loadRegistry());
+    mainWindow?.webContents.send("worker:status", { running: workerActive, scheduledCount: worker.scheduledCount() });
+    app.emit("agents-changed");
     return { success: true };
   });
 
@@ -724,6 +826,7 @@ function registerIpcHandlers() {
     const updated = registry.loadRegistry();
     mainWindow?.webContents.send("agents:updated", updated);
     mainWindow?.webContents.send("worker:status", { running: workerActive, scheduledCount: worker.scheduledCount() });
+    app.emit("agents-changed");
     return { success: true, imported, skipped };
   });
 
@@ -770,8 +873,12 @@ function registerIpcHandlers() {
     if (typeof data.notificationsEnabled === "boolean") current.notificationsEnabled = data.notificationsEnabled;
     if (typeof data.packsUrl === "string" && data.packsUrl) current.packsUrl = data.packsUrl;
     if (typeof data.runAtStartup === "boolean") {
-      // Apply immediately to the Windows Run registry key
-      app.setLoginItemSettings({ openAtLogin: data.runAtStartup });
+      // Pass --hidden so the app stays minimized to tray when launched at startup.
+      // This is more reliable than wasOpenedAtLogin on Windows.
+      app.setLoginItemSettings({
+        openAtLogin: data.runAtStartup,
+        args: data.runAtStartup ? ["--hidden"] : [],
+      });
     }
     if (typeof data.webhookEnabled === "boolean") current.webhookEnabled = data.webhookEnabled;
     if (typeof data.webhookPort === "number" && data.webhookPort > 0) current.webhookPort = data.webhookPort;
@@ -823,6 +930,25 @@ function registerIpcHandlers() {
     return app.getVersion();
   });
 
+  // Geo-location (IP-based; cached at startup)
+  ipcMain.handle("app:getGeoLocation", async (e) => {
+    if (!guard(e)) return {};
+    return _geoCache || await _fetchGeoLocation();
+  });
+
+  // Store seen-items tracking (persisted in settings.json)
+  ipcMain.handle("store:getSeenFiles", (e) => {
+    if (!guard(e)) return [];
+    return loadSettings().seenStoreFiles || [];
+  });
+  ipcMain.handle("store:markFilesSeen", (e, { fileNames }) => {
+    if (!guard(e)) return { success: false };
+    const current = loadSettings();
+    current.seenStoreFiles = fileNames || [];
+    saveSettingsFile(current);
+    return { success: true };
+  });
+
   // Export agents to a user-chosen JSON file
   ipcMain.handle("agents:export", async (e, { ids } = {}) => {
     if (!guard(e)) return { success: false, error: "Unauthorized" };
@@ -841,11 +967,16 @@ function registerIpcHandlers() {
     // Strip volatile runtime state — export only the definition fields
     const exportable = agents.map(({ id, name, description, type, enabled, schedule,
       provider, model, temperature, systemPrompt, userPrompt,
-      command, scriptPath, args, timeoutMs, chainTo, chainCondition, createdAt }) => ({
+      command, scriptPath, args, timeoutMs, chainTo, chainCondition,
+      group, mcpUrl, onCompleteWebhookEnabled, onCompleteWebhookUrl, createdAt }) => ({
       id, name, description, type, enabled, schedule,
       provider, model, temperature, systemPrompt, userPrompt,
       command, scriptPath, args, timeoutMs,
-      chainTo: chainTo || [], chainCondition: chainCondition || "success", createdAt,
+      chainTo: chainTo || [], chainCondition: chainCondition || "success",
+      group: group || "", mcpUrl: mcpUrl || "",
+      onCompleteWebhookEnabled: onCompleteWebhookEnabled || false,
+      onCompleteWebhookUrl: onCompleteWebhookUrl || "",
+      createdAt,
     }));
 
     const payload = {
@@ -903,6 +1034,7 @@ function registerIpcHandlers() {
     const updated = registry.loadRegistry();
     mainWindow?.webContents.send("agents:updated", updated);
     mainWindow?.webContents.send("worker:status", { running: workerActive, scheduledCount: worker.scheduledCount() });
+    app.emit("agents-changed");
 
     return { success: true, imported, skipped };
   });
@@ -959,6 +1091,9 @@ app.whenReady().then(() => {
   registerIpcHandlers();
   createWindow();
   createTray();
+
+  // Fetch geo-location in background — non-blocking
+  _fetchGeoLocation().catch(() => {});
 });
 
 // Keep running in the tray when all windows are closed

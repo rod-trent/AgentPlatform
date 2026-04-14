@@ -9,6 +9,7 @@ let PROVIDERS     = {};          // keyed by providerId, populated on init
 let activeSettingsProvider = ""; // which chip is selected in the settings dialog
 let selectionMode   = false;     // true when user is picking agents to export
 let selectedIds     = new Set(); // agent ids checked for export
+let _geoLocation    = null;      // cached geo result from main process
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 (async function init() {
@@ -26,8 +27,12 @@ let selectedIds     = new Set(); // agent ids checked for export
 
   populateFormProviders(settings.defaultProvider);
   populateChainToDropdown();
+  populateGroupDatalist();
   updateWorkerPill(status.running, status.scheduledCount);
   renderAgentList();
+
+  // Fetch geo in background for display in settings/status
+  window.agentAPI.getGeoLocation().then(geo => { _geoLocation = geo; }).catch(() => {});
 
   // Push subscriptions from main process
   window.agentAPI.onStatusChanged(({ id, status: s }) => patchAgent(id, { lastStatus: s }));
@@ -50,6 +55,7 @@ let selectedIds     = new Set(); // agent ids checked for export
     agents = updated;
     renderAgentList();
     populateChainToDropdown();
+    populateGroupDatalist();
   });
 
   // Background store check — badge the Store button if new agents are available
@@ -183,7 +189,31 @@ function renderAgentList() {
     empty.style.display = "flex"; return;
   }
   list.style.display = "flex"; empty.style.display = "none";
-  list.innerHTML = agents.map(cardHTML).join("");
+
+  // Group agents: ungrouped first, then named groups
+  const ungrouped  = agents.filter(a => !a.group);
+  const groupNames = [...new Set(agents.filter(a => a.group).map(a => a.group))].sort();
+
+  let html = ungrouped.map(cardHTML).join("");
+  for (const g of groupNames) {
+    const groupAgents = agents.filter(a => a.group === g);
+    const allEnabled  = groupAgents.every(a => a.enabled);
+    html += `
+      <div class="group-header">
+        <span class="group-header-label">📁 ${esc(g)}</span>
+        <span class="group-header-count">${groupAgents.length} agent${groupAgents.length !== 1 ? "s" : ""}</span>
+        <button class="fluent-btn" style="height:24px;font-size:11px;padding:0 8px"
+                data-group-run="${esc(g)}" title="Run all agents in this group">▶ Run Group</button>
+        <button class="fluent-btn" style="height:24px;font-size:11px;padding:0 8px"
+                data-group-toggle="${esc(g)}" data-group-enabled="${allEnabled}"
+                title="${allEnabled ? "Disable" : "Enable"} all agents in this group">
+          ${allEnabled ? "⏸ Disable" : "▶ Enable"} All
+        </button>
+      </div>
+    `;
+    html += groupAgents.map(cardHTML).join("");
+  }
+  list.innerHTML = html;
 }
 
 function patchAgent(id, updates) {
@@ -210,6 +240,12 @@ function cardHTML(a) {
   const chainBadge   = chainedAgent
     ? `<span class="fluent-badge badge-chain" title="Chains to ${esc(chainedAgent.name)}">⛓ ${esc(chainedAgent.name)}</span>`
     : "";
+  const groupBadge   = a.group
+    ? `<span class="fluent-badge badge-group">📁 ${esc(a.group)}</span>`
+    : "";
+  const mcpBadge     = a.mcpUrl
+    ? `<span class="fluent-badge badge-mcp" title="MCP: ${esc(a.mcpUrl)}">MCP</span>`
+    : "";
 
   const hasOutput  = !!(a.lastResult);
   const hasHistory = true; // History button always shown after first run
@@ -228,7 +264,7 @@ function cardHTML(a) {
     <div class="card-info">
       <div class="card-name">${esc(a.name)}</div>
       <div class="card-meta">
-        ${typeBadge}${provBadge}${chainBadge}
+        ${typeBadge}${provBadge}${chainBadge}${groupBadge}${mcpBadge}
         <span class="card-meta-item">⏱ ${esc(a.schedule)}</span>
         ${a.lastRun ? `<span class="card-meta-item">↻ ${timeAgo(a.lastRun)}</span>` : ""}
         ${a.model ? `<span class="card-meta-item" style="font-family:monospace">${esc(a.model)}</span>` : ""}
@@ -252,6 +288,7 @@ function cardHTML(a) {
       <button class="card-btn" data-action="output" data-target="${outputId}">Output</button>
     ` : ""}
     ${a.lastRun ? `<button class="card-btn" data-action="history" data-id="${a.id}" title="View run history">History</button>` : ""}
+    ${a.lastRun ? `<button class="card-btn" data-action="diff" data-id="${a.id}" title="Show diff from previous run">Diff</button>` : ""}
     <button class="card-btn" data-action="edit" data-id="${a.id}">✎ Edit</button>
     <button class="card-btn run" data-action="run" data-id="${a.id}">▶ Run Now</button>
     <button class="card-btn del" data-action="delete" data-id="${a.id}">✕</button>
@@ -422,6 +459,14 @@ function editAgent(id) {
   // Populate shared fields
   document.getElementById("f-name").value = a.name;
   document.getElementById("f-desc").value = a.description || "";
+  document.getElementById("f-group").value   = a.group   || "";
+  document.getElementById("f-mcp-url").value = a.mcpUrl  || "";
+  const whEn  = document.getElementById("f-webhook-enabled");
+  const whUrl = document.getElementById("f-webhook-url");
+  const whWrap = document.getElementById("f-webhook-url-wrap");
+  if (whEn)  { whEn.checked   = !!a.onCompleteWebhookEnabled; }
+  if (whUrl) { whUrl.value    = a.onCompleteWebhookUrl || ""; }
+  if (whWrap){ whWrap.style.display = a.onCompleteWebhookEnabled ? "" : "none"; }
 
   // Chain-to + condition
   populateChainToDropdown(id);
@@ -551,6 +596,9 @@ function collectFormPayload() {
     chainCondition = kw ? `contains:${kw}` : "success";
   }
 
+  const webhookEnabled = document.getElementById("f-webhook-enabled")?.checked || false;
+  const webhookUrl     = document.getElementById("f-webhook-url")?.value.trim()  || "";
+
   const payload = {
     name,
     description: document.getElementById("f-desc").value.trim(),
@@ -558,6 +606,10 @@ function collectFormPayload() {
     schedule,
     chainTo:        chainVal ? [chainVal] : [],
     chainCondition: chainVal ? chainCondition : "success",
+    group:          document.getElementById("f-group")?.value.trim() || "",
+    mcpUrl:         document.getElementById("f-mcp-url")?.value.trim() || "",
+    onCompleteWebhookEnabled: webhookEnabled,
+    onCompleteWebhookUrl:     webhookEnabled ? webhookUrl : "",
   };
 
   if (formType === "prompt") {
@@ -897,6 +949,12 @@ async function openStore() {
   _setStoreBadge(0); // clear badge once user opens the store
 
   const res = await window.agentAPI.fetchStore();
+
+  // Mark all current store files as seen so badge resets
+  if (res.success && res.files.length) {
+    const fileNames = res.files.map(f => f.name);
+    window.agentAPI.markStoreFilesSeen(fileNames).catch(() => {});
+  }
   document.getElementById("store-loading").style.display = "none";
 
   if (!res.success) {
@@ -996,14 +1054,14 @@ function closeStore() {
 // ── Store badge ───────────────────────────────────────────────────────────────
 async function _refreshStoreBadge() {
   try {
-    const res = await window.agentAPI.fetchStore();
+    const [res, seen] = await Promise.all([
+      window.agentAPI.fetchStore(),
+      window.agentAPI.getSeenStoreFiles(),
+    ]);
     if (!res.success || !res.files.length) return;
-    const installedNames = new Set(agents.map(a => a.name.toLowerCase()));
-    // Count files whose filename-derived name doesn't match any installed agent
-    const newCount = res.files.filter(f => {
-      const derived = f.name.replace(/\.json$/i, "").replace(/[-_]/g, " ").toLowerCase();
-      return !installedNames.has(derived);
-    }).length;
+    const seenSet = new Set(seen || []);
+    // Count store files the user hasn't opened/seen yet
+    const newCount = res.files.filter(f => !seenSet.has(f.name)).length;
     _setStoreBadge(newCount);
   } catch { /* network unavailable — badge stays hidden */ }
 }
@@ -1028,8 +1086,10 @@ function resetForm() {
   document.getElementById("btn-add-agent").textContent = "+ \u00a0Add Agent";
   document.getElementById("btn-cancel-edit").style.display = "none";
 
-  ["f-name","f-desc","f-system","f-user","f-command","f-script-path"]
+  ["f-name","f-desc","f-system","f-user","f-command","f-script-path","f-group","f-mcp-url","f-webhook-url"]
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
+  const wh = document.getElementById("f-webhook-enabled");
+  if (wh) { wh.checked = false; document.getElementById("f-webhook-url-wrap").style.display = "none"; }
   document.getElementById("f-schedule-pick").value = "*/10 * * * *";
   document.getElementById("custom-cron-row").style.display = "none";
   document.getElementById("f-timeout").value = "30";
@@ -1246,6 +1306,7 @@ document.getElementById("agent-list").addEventListener("click", e => {
   if (action === "copy-output") copyOutput(id);
   if (action === "open-html")   openOutputAsHtml(id);
   if (action === "history")     showHistory(id);
+  if (action === "diff")        showDiff(id);
 });
 
 document.getElementById("agent-list").addEventListener("change", e => {
@@ -1259,6 +1320,202 @@ document.getElementById("agent-list").addEventListener("change", e => {
     updateExportBtn();
   }
 });
+
+// Group header button delegation
+document.getElementById("agent-list").addEventListener("click", e => {
+  const runBtn    = e.target.closest("[data-group-run]");
+  const toggleBtn = e.target.closest("[data-group-toggle]");
+  if (runBtn) {
+    runGroup(runBtn.dataset.groupRun);
+  } else if (toggleBtn) {
+    const group   = toggleBtn.dataset.groupToggle;
+    const enabled = toggleBtn.dataset.groupEnabled === "true";
+    setGroupEnabled(group, !enabled);
+  }
+});
+
+// ── Run All ───────────────────────────────────────────────────────────────────
+document.getElementById("btn-run-all").addEventListener("click", async () => {
+  if (!workerActive) {
+    const start = await window.agentAPI.startWorker();
+    if (!start.ok) { toast(start.error || "Configure a provider in Settings first.", "error"); return; }
+  }
+  const res = await window.agentAPI.runAll();
+  if (res.success) toast(`Running ${res.count} agent(s) now.`, "info");
+  else             toast(res.error || "Could not run agents.", "error");
+});
+
+// ── Chain graph ───────────────────────────────────────────────────────────────
+document.getElementById("btn-view-chain").addEventListener("click", openChainGraph);
+document.getElementById("btn-close-chain").addEventListener("click", () => document.getElementById("chain-overlay").classList.remove("open"));
+document.getElementById("btn-close-chain-footer").addEventListener("click", () => document.getElementById("chain-overlay").classList.remove("open"));
+document.getElementById("chain-overlay").addEventListener("click", e => {
+  if (e.target === e.currentTarget) document.getElementById("chain-overlay").classList.remove("open");
+});
+
+function openChainGraph() {
+  const content = document.getElementById("chain-content");
+  const warning = document.getElementById("chain-cycle-warning");
+
+  // Build adjacency map
+  const agentMap = new Map(agents.map(a => [a.id, a]));
+  const chained  = agents.filter(a => a.chainTo?.length);
+
+  if (!chained.length) {
+    content.innerHTML = `<div style="color:var(--text-secondary);font-size:13px;padding:16px 0">No agent chains configured yet.</div>`;
+    warning.style.display = "none";
+    document.getElementById("chain-overlay").classList.add("open");
+    return;
+  }
+
+  // Detect cycles via DFS
+  const cycles = [];
+  function detectCycle(startId, visited = new Set(), path = []) {
+    if (visited.has(startId)) {
+      const cycleStart = path.indexOf(startId);
+      if (cycleStart !== -1) cycles.push([...path.slice(cycleStart), startId]);
+      return;
+    }
+    visited.add(startId);
+    path.push(startId);
+    const agent = agentMap.get(startId);
+    for (const nextId of (agent?.chainTo || [])) {
+      detectCycle(nextId, new Set(visited), [...path]);
+    }
+  }
+  for (const a of agents) detectCycle(a.id);
+  const cycleIds = new Set(cycles.flatMap(c => c));
+
+  // Render chain tree
+  const rendered = new Set();
+  let html = "";
+
+  function renderChain(id, depth = 0) {
+    const a = agentMap.get(id);
+    if (!a) return `<div class="chain-node chain-missing" style="margin-left:${depth * 20}px">⚠ [deleted agent ${id}]</div>`;
+    const isCyclic = cycleIds.has(id);
+    const alreadyShown = rendered.has(id) && !isCyclic;
+    rendered.add(id);
+    let node = `<div class="chain-node${isCyclic ? " chain-cyclic" : ""}" style="margin-left:${depth * 20}px">
+      ${depth > 0 ? '<span class="chain-arrow">↳</span>' : ''}
+      <span class="chain-name">${esc(a.name)}</span>
+      ${isCyclic ? '<span class="chain-cycle-tag">⟳ cycle</span>' : ''}
+      ${a.chainTo?.length && !alreadyShown ? `<span class="chain-cond" title="Chain condition">${esc(a.chainCondition || "success")}</span>` : ""}
+    </div>`;
+    if (a.chainTo?.length && !alreadyShown) {
+      for (const nextId of a.chainTo) node += renderChain(nextId, depth + 1);
+    }
+    return node;
+  }
+
+  // Find root nodes (not targeted by any chain)
+  const targetIds = new Set(agents.flatMap(a => a.chainTo || []));
+  const roots = chained.filter(a => !targetIds.has(a.id));
+  // Also include any chained agents that are targeted by roots
+  const allRoots = roots.length ? roots : chained.slice(0, 1);
+
+  html = allRoots.map(a => renderChain(a.id)).join("");
+
+  content.innerHTML = html;
+  if (cycles.length) {
+    const names = [...new Set(cycles.flat())].map(id => agentMap.get(id)?.name || id).join(", ");
+    warning.textContent = `⚠ Circular dependency detected involving: ${names}`;
+    warning.style.display = "";
+  } else {
+    warning.style.display = "none";
+  }
+  document.getElementById("chain-overlay").classList.add("open");
+}
+
+// ── Output Diff ───────────────────────────────────────────────────────────────
+document.getElementById("btn-close-diff").addEventListener("click", () => document.getElementById("diff-overlay").classList.remove("open"));
+document.getElementById("btn-close-diff-footer").addEventListener("click", () => document.getElementById("diff-overlay").classList.remove("open"));
+document.getElementById("diff-overlay").addEventListener("click", e => {
+  if (e.target === e.currentTarget) document.getElementById("diff-overlay").classList.remove("open");
+});
+
+async function showDiff(id) {
+  const a = agents.find(x => x.id === id);
+  if (!a) return;
+  document.getElementById("diff-title").textContent = `Output Diff — ${a.name}`;
+
+  const entries = await window.agentAPI.getAgentHistory(id);
+  const diffContent = document.getElementById("diff-content");
+
+  if (entries.length < 2) {
+    diffContent.innerHTML = `<div style="color:var(--text-secondary);font-size:13px;padding:16px 0">Need at least 2 runs to show a diff. Run the agent again first.</div>`;
+    document.getElementById("diff-overlay").classList.add("open");
+    return;
+  }
+
+  const current  = (entries[0].result || "").split("\n");
+  const previous = (entries[1].result || "").split("\n");
+
+  diffContent.innerHTML = _computeLineDiff(previous, current);
+  document.getElementById("diff-overlay").classList.add("open");
+}
+
+/**
+ * Simple LCS-based line diff. Returns HTML with added/removed/unchanged spans.
+ */
+function _computeLineDiff(oldLines, newLines) {
+  // Build LCS table
+  const m = oldLines.length, n = newLines.length;
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = oldLines[i-1] === newLines[j-1]
+        ? dp[i-1][j-1] + 1
+        : Math.max(dp[i-1][j], dp[i][j-1]);
+    }
+  }
+  // Backtrack
+  const ops = [];
+  let i = m, j = n;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && oldLines[i-1] === newLines[j-1]) {
+      ops.unshift({ type: "same", line: oldLines[i-1] }); i--; j--;
+    } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
+      ops.unshift({ type: "add",  line: newLines[j-1]  }); j--;
+    } else {
+      ops.unshift({ type: "del",  line: oldLines[i-1]  }); i--;
+    }
+  }
+  return ops.map(op => {
+    const cls   = op.type === "add" ? "diff-add" : op.type === "del" ? "diff-del" : "diff-same";
+    const prefix = op.type === "add" ? "+" : op.type === "del" ? "−" : " ";
+    return `<div class="${cls}"><span class="diff-prefix">${prefix}</span>${esc(op.line)}</div>`;
+  }).join("") || `<div style="color:var(--text-secondary);font-size:13px">No differences found.</div>`;
+}
+
+// ── Groups ────────────────────────────────────────────────────────────────────
+function populateGroupDatalist() {
+  const dl = document.getElementById("f-group-list");
+  if (!dl) return;
+  const names = [...new Set(agents.map(a => a.group).filter(Boolean))].sort();
+  dl.innerHTML = names.map(n => `<option value="${esc(n)}"></option>`).join("");
+}
+
+async function runGroup(group) {
+  if (!workerActive) {
+    const start = await window.agentAPI.startWorker();
+    if (!start.ok) { toast(start.error || "Configure a provider in Settings first.", "error"); return; }
+  }
+  const res = await window.agentAPI.runGroup(group);
+  if (res.success) toast(`Running ${res.count} agent(s) in group "${group}".`, "info");
+  else             toast(res.error || "Could not run group.", "error");
+}
+
+async function setGroupEnabled(group, enabled) {
+  const res = await window.agentAPI.setGroupEnabled(group, enabled);
+  if (res.success) {
+    agents = await window.agentAPI.listAgents();
+    renderAgentList();
+    toast(`Group "${group}" ${enabled ? "enabled" : "disabled"}.`, "info");
+  } else {
+    toast(res.error || "Could not update group.", "error");
+  }
+}
 
 // ── Form event listeners ──────────────────────────────────────────────────────
 document.getElementById("tab-prompt").addEventListener("click", () => setFormType("prompt"));
@@ -1328,6 +1585,12 @@ document.getElementById("f-temp").addEventListener("input", () => {
   document.getElementById("temp-val").textContent = document.getElementById("f-temp").value;
 });
 
+// Wire webhook toggle
+document.getElementById("f-webhook-enabled")?.addEventListener("change", () => {
+  const enabled = document.getElementById("f-webhook-enabled").checked;
+  document.getElementById("f-webhook-url-wrap").style.display = enabled ? "" : "none";
+});
+
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") {
@@ -1336,6 +1599,8 @@ document.addEventListener("keydown", e => {
     closeStore();
     document.getElementById("history-overlay").classList.remove("open");
     document.getElementById("packs-overlay").classList.remove("open");
+    document.getElementById("chain-overlay").classList.remove("open");
+    document.getElementById("diff-overlay").classList.remove("open");
   }
 });
 

@@ -20,6 +20,9 @@ let _win = null;
 /** Full settings object — needed by runPromptAgent to pick the right provider/key. */
 let _settings = null;
 
+/** Cached geo-location data set by the main process via setGeo(). */
+let _geo = null;
+
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 function _push(channel, payload) {
@@ -37,12 +40,14 @@ function _log(msg) {
  * Resolve template variables in a prompt string.
  * Supported: {{date}}, {{time}}, {{datetime}}, {{dayOfWeek}},
  *            {{year}}, {{month}}, {{day}}, {{lastResult}},
+ *            {{city}}, {{country}}, {{location}}, {{latitude}}, {{longitude}},
  *            {{env:VAR_NAME}}
  */
 function resolveVariables(text, context) {
   if (!text) return text;
   const now  = new Date();
   const days = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  const geo  = _geo || {};
   return text
     .replace(/\{\{date\}\}/gi,       now.toLocaleDateString())
     .replace(/\{\{time\}\}/gi,       now.toLocaleTimeString())
@@ -52,7 +57,30 @@ function resolveVariables(text, context) {
     .replace(/\{\{month\}\}/gi,      String(now.getMonth() + 1).padStart(2, "0"))
     .replace(/\{\{day\}\}/gi,        String(now.getDate()).padStart(2, "0"))
     .replace(/\{\{lastResult\}\}/gi, context?.lastResult || "")
+    .replace(/\{\{city\}\}/gi,       geo.city      || "Unknown")
+    .replace(/\{\{country\}\}/gi,    geo.country   || "Unknown")
+    .replace(/\{\{region\}\}/gi,     geo.region    || "Unknown")
+    .replace(/\{\{latitude\}\}/gi,   String(geo.latitude  ?? ""))
+    .replace(/\{\{longitude\}\}/gi,  String(geo.longitude ?? ""))
+    .replace(/\{\{location\}\}/gi,   geo.city && geo.country ? `${geo.city}, ${geo.country}` : "Unknown")
     .replace(/\{\{env:([^}]+)\}\}/gi, (_, name) => process.env[name.trim()] || "");
+}
+
+/**
+ * Build a date/time + location context header injected into every system prompt.
+ * This ensures the LLM always knows the current date/time even when the user
+ * hasn't added {{date}} variables manually.
+ */
+function _buildContextHeader() {
+  const now  = new Date();
+  const days = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  const geo  = _geo;
+  const dateStr = `${days[now.getDay()]}, ${now.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}`;
+  const timeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZoneName: "short" });
+  let header = `[System context — Today: ${dateStr}. Current time: ${timeStr}.`;
+  if (geo?.city && geo?.country) header += ` Location: ${geo.city}, ${geo.country}.`;
+  header += "]";
+  return header;
 }
 
 /**
@@ -85,6 +113,57 @@ function _notify(title, body, type) {
     n.show();
   } catch (err) {
     _log(`notification error: ${err.message}`);
+  }
+}
+
+/**
+ * POST JSON payload to an outbound webhook URL (fire-and-forget).
+ * Uses Node's built-in http/https — no extra dependencies.
+ */
+function _postOutboundWebhook(url, payload) {
+  try {
+    const mod  = url.startsWith("https") ? require("https") : require("http");
+    const body = JSON.stringify(payload);
+    const u    = new URL(url);
+    const opts = {
+      hostname: u.hostname,
+      port:     u.port || (url.startsWith("https") ? 443 : 80),
+      path:     u.pathname + u.search,
+      method:   "POST",
+      headers:  { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+    };
+    const req = mod.request(opts, (res) => { res.resume(); });
+    req.on("error", (err) => _log(`outbound webhook error: ${err.message}`));
+    req.write(body);
+    req.end();
+  } catch (err) {
+    _log(`outbound webhook setup error: ${err.message}`);
+  }
+}
+
+/**
+ * If the agent has an MCP server configured, fetch its tool/resource list
+ * and return a context string to prepend to the system prompt.
+ */
+async function _fetchMcpContext(mcpUrl) {
+  if (!mcpUrl) return "";
+  try {
+    const mod = mcpUrl.startsWith("https") ? require("https") : require("http");
+    const body = await new Promise((resolve, reject) => {
+      mod.get(mcpUrl.replace(/\/+$/, "") + "/mcp/v1/tools", { headers: { Accept: "application/json" } }, (res) => {
+        let data = "";
+        res.setEncoding("utf-8");
+        res.on("data", c => { data += c; });
+        res.on("end", () => resolve(data));
+      }).on("error", reject);
+    });
+    const json = JSON.parse(body);
+    const tools = Array.isArray(json?.tools) ? json.tools : (Array.isArray(json) ? json : []);
+    if (!tools.length) return "";
+    const descriptions = tools.map(t => `- ${t.name}: ${t.description || ""}`).join("\n");
+    return `[Available MCP tools from ${mcpUrl}:\n${descriptions}]`;
+  } catch {
+    return ""; // MCP server unavailable — continue without it
   }
 }
 
@@ -134,9 +213,15 @@ async function _executeAgent(agentId, chainedInput = null) {
     if (agent.type === "prompt") {
       // Build effective agent: chained input overrides userPrompt, then resolve variables
       const context = { lastResult: chainedInput || agent.lastResult || "" };
+      // Prepend a date/time/location context header so the LLM always knows the current date
+      const ctxHeader = _buildContextHeader();
+      // Fetch optional MCP tool context
+      const mcpContext = agent.mcpUrl ? await _fetchMcpContext(agent.mcpUrl) : "";
+      const baseSystem = agent.systemPrompt || "";
+      const systemParts = [ctxHeader, mcpContext, baseSystem].filter(Boolean);
       const effectiveAgent = {
         ...agent,
-        systemPrompt: resolveVariables(agent.systemPrompt, context),
+        systemPrompt: resolveVariables(systemParts.join("\n\n"), context),
         userPrompt:   resolveVariables(
           chainedInput != null ? String(chainedInput) : agent.userPrompt,
           context
@@ -171,6 +256,18 @@ async function _executeAgent(agentId, chainedInput = null) {
 
   runningAgents.delete(agentId);
 
+  // ── Outbound webhook on completion ────────────────────────────────────────
+  if (agent.onCompleteWebhookEnabled && agent.onCompleteWebhookUrl) {
+    _postOutboundWebhook(agent.onCompleteWebhookUrl, {
+      agentId,
+      name:      agent.name,
+      status,
+      result:    result ? String(result).slice(0, 10_000) : null,
+      duration,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   // ── Agent chaining ─────────────────────────────────────────────────────────
   // Fire chained agents based on chainCondition (default: success only)
   if (Array.isArray(agent.chainTo) && agent.chainTo.length && _chainShouldFire(agent, status, result)) {
@@ -195,6 +292,11 @@ function setSettings(settings) {
   // Propagate to the LLM client so it re-creates its cached clients
   const llm = require("./grokClient");
   llm.configure(settings);
+}
+
+/** Store the IP-based geo-location so template variables can use it. */
+function setGeo(geo) {
+  _geo = geo;
 }
 
 /**
@@ -284,6 +386,6 @@ async function testAgentConfig(config, settings) {
 }
 
 module.exports = {
-  init, setSettings, rebuildSchedule, triggerAgent, stopAll,
+  init, setSettings, setGeo, rebuildSchedule, triggerAgent, stopAll,
   scheduledCount, isRunning, testAgentConfig,
 };

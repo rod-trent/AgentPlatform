@@ -1377,3 +1377,133 @@ body {
   flex-shrink: 0;
   align-self: center;
 }
+
+/* ── Agent group headers ─────────────────────────────────────────────────────── */
+.group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px 4px;
+  margin-top: 10px;
+  border-bottom: 1px solid var(--stroke);
+}
+.group-header:first-child { margin-top: 0; }
+.group-header-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  flex: 1;
+}
+.group-header-count {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+/* ── New badges ──────────────────────────────────────────────────────────────── */
+.badge-group { background: rgba(96, 165, 250, 0.15); color: #60a5fa; }
+.badge-mcp   { background: rgba(168,85,247,0.15);    color: #c084fc; font-weight: 700; }
+
+/* ── Chain graph dialog ──────────────────────────────────────────────────────── */
+#chain-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(16px) saturate(1.2);
+  display: none;
+  place-items: center;
+  z-index: 260;
+}
+#chain-overlay.open { display: grid; }
+
+#chain-dialog {
+  width: min(640px, calc(100vw - 48px));
+  max-height: 80vh;
+  background: var(--mica-layer-2);
+  border: 1px solid var(--stroke-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-16);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  animation: dialog-in var(--dur-medium) var(--ease-decelerate);
+}
+#chain-dialog .dialog-body { overflow-y: auto; }
+
+.chain-graph-wrap { display: flex; flex-direction: column; gap: 2px; }
+
+.chain-node {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  color: var(--text-primary);
+}
+.chain-node:hover { background: var(--fill-subtle); }
+.chain-node.chain-cyclic { color: #fc7572; }
+.chain-node.chain-missing { color: var(--text-tertiary); font-style: italic; }
+
+.chain-arrow  { color: var(--accent); font-size: 14px; }
+.chain-name   { font-weight: 600; }
+.chain-cond   { font-size: 11px; color: var(--text-tertiary); background: var(--fill-subtle);
+                padding: 1px 5px; border-radius: 4px; margin-left: 4px; }
+.chain-cycle-tag {
+  font-size: 10px; font-weight: 700; color: #fc7572;
+  background: rgba(252,117,114,0.15); padding: 1px 5px; border-radius: 4px;
+}
+
+/* ── Output diff dialog ──────────────────────────────────────────────────────── */
+#diff-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(16px) saturate(1.2);
+  display: none;
+  place-items: center;
+  z-index: 270;
+}
+#diff-overlay.open { display: grid; }
+
+#diff-dialog {
+  width: min(740px, calc(100vw - 48px));
+  max-height: 82vh;
+  background: var(--mica-layer-2);
+  border: 1px solid var(--stroke-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-16);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  animation: dialog-in var(--dur-medium) var(--ease-decelerate);
+}
+#diff-dialog .dialog-body { overflow-y: auto; }
+
+.diff-legend {
+  display: flex;
+  gap: 16px;
+  font-size: 11px;
+  margin-bottom: 10px;
+  padding: 6px 8px;
+  background: var(--fill-subtle);
+  border-radius: var(--radius);
+}
+.diff-added-sample   { color: #6ccb6c; }
+.diff-removed-sample { color: #fc7572; }
+.diff-unchanged-sample { color: var(--text-tertiary); }
+
+.diff-wrap {
+  font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.diff-add  { background: rgba(108, 203, 108, 0.12); color: #6ccb6c; padding: 0 4px; }
+.diff-del  { background: rgba(252, 117, 114, 0.12); color: #fc7572; padding: 0 4px; text-decoration: line-through; }
+.diff-same { color: var(--text-secondary); padding: 0 4px; }
+.diff-prefix {
+  display: inline-block;
+  width: 14px;
+  user-select: none;
+  opacity: 0.7;
+}
+
