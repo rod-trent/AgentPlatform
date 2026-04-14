@@ -10,7 +10,7 @@ That's not an accident. It's what happens when a platform gets enough users that
 
 V1.3.0 is the answer to all of that.
 
-![AI Agent Platform v1.3.0](Images/v1.3.0-Main.png)
+![AI Agent Platform v1.3.0](https://github.com/rod-trent/AgentPlatform/blob/main/Images/v1.3.0-Main.png)
 *AI Agent Platform v1.3.0 — main window.*
 
 ---
