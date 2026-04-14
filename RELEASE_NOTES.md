@@ -2,6 +2,90 @@
 
 ---
 
+## v1.3.0 — April 14, 2026
+
+### New Features
+
+#### Agent Groups
+Tag any agent into a named group using the new **Group** field in the Add/Edit Agent form. When groups exist, the agent list renders group headers showing the group name and agent count. Each header has two buttons:
+- **▶ Run Group** — triggers every enabled agent in the group immediately
+- **Enable/Disable All** — toggles all agents in the group on or off in one click
+
+Groups also appear in the system tray right-click menu, so you can start an entire group without opening the main window.
+
+#### Run All Now
+A **▶▶ Run All** button in the Active Agents header triggers every currently enabled agent at once. The scheduler does not need to be running — the button starts it automatically if needed.
+
+#### Run on Demand from the System Tray
+The tray right-click context menu now includes a **Run Agent** submenu that lists every enabled agent by name. Agents can also be launched by group from the same menu. The tray menu rebuilds automatically whenever agents are added, edited, enabled, or deleted.
+
+#### Output Diffing
+A **Diff** button appears on each agent card after the agent has run at least once. Clicking it opens a dialog that computes a line-by-line diff between the current run output and the previous run output using the Longest Common Subsequence algorithm. Added lines are shown in green, removed lines in red, and unchanged lines in grey.
+
+#### MCP Server Integration
+Each prompt agent now has an optional **MCP Server URL** field. Before every run, if a URL is configured, the platform fetches the tool list from `{mcpUrl}/mcp/v1/tools` and prepends the available tool descriptions to the agent's system prompt. This gives the LLM full awareness of what MCP tools it can reference without any manual prompt engineering. If the MCP server is unreachable the run continues without the context.
+
+#### Outbound Webhooks on Completion
+A per-agent **Call webhook on completion** toggle and URL field enable outbound HTTP notifications. After every run the platform POSTs the following JSON payload to the configured URL — enabling integrations with Slack incoming webhooks, Microsoft Teams, Power Automate, or any HTTP endpoint:
+
+```json
+{
+  "agentId": "…",
+  "name": "Agent Name",
+  "status": "success",
+  "result": "…",
+  "duration": 1234,
+  "timestamp": "2026-04-14T…"
+}
+```
+
+Webhook calls are fire-and-forget and never block the agent from completing.
+
+#### Chain Graph Visualization
+A **⛓ Chains** button in the Active Agents header opens a dialog that renders the full agent chain graph as an indented tree with directional arrows. A depth-first cycle detection algorithm runs over the graph on open; any agents that form a circular dependency are highlighted in red and a warning banner lists the affected agent names. This makes it safe to design multi-step chains before problems occur at runtime.
+
+#### Automatic Date/Time Context
+Every prompt agent now receives a system-context header injected automatically at the start of its system prompt:
+
+```
+[System context — Today: Monday, April 14, 2026. Current time: 09:00 AM CDT. Location: Dallas, Texas.]
+```
+
+This means the LLM always knows the current date, time, and location without requiring `{{date}}` or `{{time}}` variables in the prompt. The header does not override or replace the agent's configured system prompt — it is prepended.
+
+#### Geolocation Support
+On startup the platform performs a background IP-based geolocation lookup (via `ipapi.co`). The result is cached and made available as prompt template variables:
+
+| Variable | Example value |
+|---|---|
+| `{{location}}` | Dallas, United States |
+| `{{city}}` | Dallas |
+| `{{country}}` | United States |
+| `{{region}}` | Texas |
+| `{{latitude}}` | 32.7767 |
+| `{{longitude}}` | -96.7970 |
+
+Location is also automatically included in the date/time context header when available.
+
+### Bug Fixes
+
+#### Store Badge False Positive
+The red badge on the **🛒 Store** button previously compared store filenames against installed agent names, a heuristic that frequently failed when filenames and agent names did not match exactly. The badge now tracks which store files the user has already seen (persisted in `settings.json`). The badge clears when the Store dialog is opened and only reappears when new files are added to the store after the last visit.
+
+#### Startup Minimize to Tray
+The "start minimized to tray" behavior was unreliable on some Windows configurations because `app.getLoginItemSettings().wasOpenedAtLogin` does not always return `true` when the app is launched via the Windows startup registry key. The startup registration now passes `--hidden` as a launch argument, and the app checks `process.argv.includes('--hidden')` at startup for a reliable signal.
+
+### Under the Hood
+
+- `worker.js` — added `setGeo()` for location injection; added `_buildContextHeader()` for auto date/time/location prefix; added `_fetchMcpContext()` for optional MCP tool list fetch; added `_postOutboundWebhook()` fire-and-forget POST; `resolveVariables()` extended with `{{city}}`, `{{country}}`, `{{region}}`, `{{latitude}}`, `{{longitude}}`, `{{location}}`
+- `registry.js` — agent schema extended with `group`, `mcpUrl`, `onCompleteWebhookEnabled`, `onCompleteWebhookUrl`
+- `index.js` — `_fetchGeoLocation()` fetches and caches IP geolocation at startup; `setLoginItemSettings` updated to pass `--hidden` arg; tray `buildMenu()` now generates a Run Agent submenu from live registry; IPC handlers added: `agents:runAll`, `agents:runGroup`, `agents:setGroupEnabled`, `app:getGeoLocation`, `store:getSeenFiles`, `store:markFilesSeen`; all agent-mutating handlers emit `agents-changed` to trigger tray menu rebuild
+- `preload.js` — exposed `runAll`, `runGroup`, `setGroupEnabled`, `getGeoLocation`, `getSeenStoreFiles`, `markStoreFilesSeen`
+- `app.js` — `renderAgentList()` now renders group headers with run/toggle actions; `_refreshStoreBadge()` uses seen-file tracking; `openStore()` marks files as seen on open; `collectFormPayload`, `editAgent`, `resetForm` updated for new agent fields; new dialog functions: `openChainGraph()`, `showDiff()`, `_computeLineDiff()`; `populateGroupDatalist()` populates the group autocomplete datalist
+- `styles.css` — added styles for `.group-header`, `.badge-group`, `.badge-mcp`, chain graph dialog, output diff dialog
+
+---
+
 ## v1.2.0 — April 9, 2026
 
 ### New Features

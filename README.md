@@ -6,7 +6,7 @@ Built with [Electron](https://electronjs.org) and styled to the Windows 11 Fluen
 
 ---
 
-![AI Agent Platform v1.2.0](https://github.com/rod-trent/AgentPlatform/blob/main/Images/v1.2.0-Main.png)
+![AI Agent Platform v1.3.0](https://github.com/rod-trent/AgentPlatform/blob/main/Images/v1.3.0-Main.png)
 
 ---
 
@@ -24,6 +24,20 @@ Built with [Electron](https://electronjs.org) and styled to the Windows 11 Fluen
 - **Windows 11 Fluent UI** — Mica material, Acrylic blur, Fluent motion, Segoe UI Variable
 - **No cloud dependency** — all data stays on your machine in `Documents\AIAgentPlatform\`
 - **OneDrive sync** — because data lives in `Documents\`, any cloud sync tool (OneDrive, Dropbox, etc.) automatically roams your agents, settings, and provider keys across every machine you install the app on
+
+### New in v1.3.0
+
+- **Agent groups** — tag any agent into a named group. Group headers appear in the agent list with **▶ Run Group** and **Enable/Disable All** buttons to start or stop an entire group at once
+- **Run All Now** — a single **▶▶ Run All** button in the header triggers every enabled agent immediately, no need to click each card individually
+- **Tray run-on-demand** — right-click the system tray icon to run any individual agent or an entire group directly from the tray, without opening the main window
+- **Output diffing** — a **Diff** button on each agent card opens a side-by-side line diff of the current run vs. the previous run, with added lines in green and removed lines in red
+- **MCP server per agent** — attach an optional MCP server URL to any prompt agent; the platform fetches the available tool list before each run and injects it into the system prompt as context
+- **Outbound webhooks on completion** — configure a webhook URL per agent; on every run the platform POSTs `{agentId, name, status, result, timestamp}` to your Slack, Teams, or any HTTP endpoint
+- **Chain graph visualization** — the **⛓ Chains** button opens a visual tree of all agent chains; a built-in DFS cycle detector highlights circular dependencies in red before they cause problems
+- **Automatic date/time context** — every prompt agent now receives a `[System context — Today: …]` header automatically, so the LLM always knows the current date and time without requiring `{{date}}` in the prompt
+- **Geolocation** — on startup the app performs a background IP-based location lookup; `{{location}}`, `{{city}}`, `{{country}}`, and `{{region}}` are now available as prompt template variables and are included in the auto-injected context header
+- **Store badge fix** — the new-items badge on the **🛒 Store** button now correctly tracks which files you have already seen rather than comparing against installed agent names
+- **Startup minimize fix** — the "minimize to tray at startup" behavior is now fully reliable on Windows via a dedicated `--hidden` launch argument
 
 ### New in v1.2.0
 
@@ -81,7 +95,7 @@ npm install
 npm run build
 ```
 
-The installer is written to `dist\AI Agent Platform Setup 1.2.0.exe`.
+The installer is written to `dist\AI Agent Platform Setup 1.3.0.exe`.
 
 ---
 
@@ -209,7 +223,7 @@ src/
     index.js          ← Electron main process, IPC handlers, tray
     preload.js        ← contextBridge API surface (window.agentAPI)
     registry.js       ← Agent CRUD, persisted to Documents/
-    worker.js         ← cron scheduler, variable substitution, chaining, notifications
+    worker.js         ← cron scheduler, variable substitution, chaining, MCP context, outbound webhooks, notifications
     grokClient.js     ← Multi-provider LLM client (OpenAI SDK)
     history.js        ← Per-agent run history persistence
     webhook.js        ← Local HTTP trigger server (loopback only)
