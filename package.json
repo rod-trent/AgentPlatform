@@ -18,9 +18,9 @@
     "build:dir": "electron-builder --win --x64 --arm64 --dir"
   },
   "dependencies": {
-    "node-cron": "^3.0.3",
+    "node-cron": "^4.2.1",
     "openai": "^4.77.0",
-    "uuid": "^11.0.3"
+    "uuid": "^14.0.0"
   },
   "devDependencies": {
     "electron": "^41.1.1",
