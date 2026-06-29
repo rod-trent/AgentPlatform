@@ -1,3 +1,5 @@
+#BIG NOTE: The Agent Platform is now incorporated into Chervil (https://github.com/chervil-ai/chervil). Further development of this platform will happen there.
+
 # AI Agent Platform
 
 A standalone Windows 11 desktop application for scheduling and running AI agents against any major LLM provider — no Python, no Streamlit, no external runtime required.
