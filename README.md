@@ -1,4 +1,4 @@
-#BIG NOTE: The Agent Platform is now incorporated into Chervil (https://github.com/chervil-ai/chervil). Further development of this platform will happen there.
+# BIG NOTE: The Agent Platform is now incorporated into Chervil (https://github.com/chervil-ai/chervil). Further development of this platform will happen there.
 
 # AI Agent Platform
 
